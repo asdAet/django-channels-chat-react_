@@ -315,6 +315,18 @@
   margin: 0;
 }
 
+.eyebrow_profile {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #9ab1d0;
+  font-size: 22px;
+  margin: 0 auto; /* центрируем сам элемент */
+  text-align: center;
+  width: max-content;
+  padding-bottom: 10%;
+}
+
+
 .grid.two {
   display: grid;
   gap: 18px;

@@ -12,19 +12,17 @@ type Props = {
   onNavigate: (path: string) => void;
 };
 
-
-
-
 export function ProfilePage({ user, onSave, onNavigate }: Props) {
   const [form, setForm] = useState({
     username: user?.username || '',
     email: user?.email || '',
   });
 
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(user?.profileImage || null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(
+    user?.profileImage || null
+  );
 
   useEffect(() => {
     // чистим blob-URL, когда компонент размонтируется или меняется превью
@@ -53,13 +51,10 @@ export function ProfilePage({ user, onSave, onNavigate }: Props) {
 
   return (
     <div className="card wide">
-      <div className="card-header">
-        <div>
-          <p className="eyebrow">Профиль</p>
-        </div>
+      <div>
+        <p className="eyebrow_profile">Профиль</p>
       </div>
 
-    
       <div className="profile_avatar_wrapper">
         <div
           className="profile_avatar"
@@ -83,7 +78,9 @@ export function ProfilePage({ user, onSave, onNavigate }: Props) {
             setImage(file);
             setPreviewUrl((prev) => {
               if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
-              return file ? URL.createObjectURL(file) : user?.profileImage || null;
+              return file
+                ? URL.createObjectURL(file)
+                : user?.profileImage || null;
             });
           }}
         />
@@ -110,21 +107,6 @@ export function ProfilePage({ user, onSave, onNavigate }: Props) {
             type="email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-        </label>
-        <label className="field full">
-          <span>Новый аватар</span>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0] || null;
-              setImage(file);
-              setPreviewUrl((prev) => {
-                if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
-                return file ? URL.createObjectURL(file) : user.profileImage || null;
-              });
-            }}
           />
         </label>
         <div className="actions">

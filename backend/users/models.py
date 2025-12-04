@@ -1,3 +1,6 @@
+import uuid
+from pathlib import Path
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.files.storage import default_storage
@@ -23,8 +26,14 @@ class Profile(models.Model):
     # Lots of ways to do it
     def save(self, *args, **kwargs):
         default_name = self._meta.get_field("image").default
-        old_image_name = getattr(self, "old_image_name", None)
+        old_image_name = getattr(self, "_old_image_name", None)
         new_image_name = self.image.name if self.image else None
+
+        # Для нового файла генерируем уникальное имя, чтобы не затирать чужие и проще чистить старый
+        if new_image_name and new_image_name != old_image_name:
+            ext = Path(new_image_name).suffix or ".jpg"
+            self.image.name = f"{uuid.uuid4().hex}{ext}"
+            new_image_name = self.image.name
 
         super().save(*args, **kwargs)
 
