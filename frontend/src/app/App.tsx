@@ -109,7 +109,11 @@ export function App() {
     setError(null)
     try {
       const { user } = await updateProfile(fields)
-      setAuth((prev) => ({ ...prev, user }))
+      const bustedImage =
+        user.profileImage && user.profileImage.length > 0
+          ? `${user.profileImage}${user.profileImage.includes('?') ? '&' : '?'}t=${Date.now()}`
+          : null
+      setAuth((prev) => ({ ...prev, user: { ...user, profileImage: bustedImage } }))
       setBanner('Профиль обновлён')
     } catch (err) {
       debugLog('Profile update failed', err)

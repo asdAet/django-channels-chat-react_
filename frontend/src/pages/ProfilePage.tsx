@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { avatarFallback } from '../shared/lib/format';
 import type { UserProfile } from '../entities/user/types';
 
@@ -24,6 +24,16 @@ export function ProfilePage({ user, onSave, onNavigate }: Props) {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [image, setImage] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(user?.profileImage || null);
+
+  useEffect(() => {
+    // чистим blob-URL, когда компонент размонтируется или меняется превью
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   if (!user) {
     return (
@@ -55,8 +65,8 @@ export function ProfilePage({ user, onSave, onNavigate }: Props) {
           className="profile_avatar"
           onClick={() => fileInputRef.current?.click()}
         >
-          {user.profileImage ? (
-            <img src={user.profileImage} alt={user.username} />
+          {previewUrl ? (
+            <img src={previewUrl} alt={user.username} />
           ) : (
             <span>{avatarFallback(user.username)}</span>
           )}
@@ -68,7 +78,14 @@ export function ProfilePage({ user, onSave, onNavigate }: Props) {
           accept="image/*"
           ref={fileInputRef}
           style={{ display: 'none' }}
-          onChange={(e) => setImage(e.target.files?.[0] || null)}
+          onChange={(e) => {
+            const file = e.target.files?.[0] || null;
+            setImage(file);
+            setPreviewUrl((prev) => {
+              if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+              return file ? URL.createObjectURL(file) : user?.profileImage || null;
+            });
+          }}
         />
       </div>
 
@@ -93,6 +110,21 @@ export function ProfilePage({ user, onSave, onNavigate }: Props) {
             type="email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+        </label>
+        <label className="field full">
+          <span>Новый аватар</span>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0] || null;
+              setImage(file);
+              setPreviewUrl((prev) => {
+                if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+                return file ? URL.createObjectURL(file) : user.profileImage || null;
+              });
+            }}
           />
         </label>
         <div className="actions">

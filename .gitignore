@@ -9,6 +9,14 @@ __pycache__/
 # vscod
 .vscode
 
+#image
+.png
+.jpeg
+.gif
+
+
+
+
 # Distribution / packaging
 .Python
 build/
