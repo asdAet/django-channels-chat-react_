@@ -216,8 +216,7 @@ export function HomePage({ user, onNavigate }: Props) {
             <span className="pill">{isLoading ? 'загрузка...' : 'онлайн'}</span>
           </div>
           <p className="muted">
-            Всегда доступна авторизованным пользователям. Сообщения сохраняются
-            в базе.
+            Доступна только авторизованным пользователям. Сообщения сохраняются в базе.
           </p>
           <button
             className="btn primary"

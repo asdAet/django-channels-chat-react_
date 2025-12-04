@@ -14,9 +14,6 @@ export function TopBar({ user, onNavigate, onLogout }: Props) {
         EchoChat
       </button>
       <nav>
-        <button className="link" onClick={() => onNavigate('/')}>
-          Домой
-        </button>
         <button className="link" onClick={() => onNavigate('/rooms/public')}>
           Публичный чат
         </button>
