@@ -230,6 +230,7 @@ button:focus {
 .avatar {
   width: 56px;
   height: 56px;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   background: linear-gradient(120deg, #7c5bff, #1a8fe3);
   display: inline-flex;
@@ -239,6 +240,7 @@ button:focus {
   color: #0a1020;
   font-weight: 800;
   text-transform: uppercase;
+  flex: 0 0 auto;
 }
 
 .avatar img {
@@ -731,11 +733,18 @@ button:focus {
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.04);
+  align-items: flex-start;
+}
+
+.message-body {
+  min-width: 0;
 }
 
 .message-body p {
   margin: 4px 0 0;
   color: #e2e8f5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message-meta {
