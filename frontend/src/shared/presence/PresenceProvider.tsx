@@ -15,13 +15,23 @@ type ProviderProps = {
 
 export function PresenceProvider({ user, children }: ProviderProps) {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([])
-  const presenceUrl = useMemo(() => (user ? `${getWebSocketBase()}/ws/presence/` : null), [user])
+  const [guestCount, setGuestCount] = useState(0)
+  const presenceUrl = useMemo(() => {
+    const base = `${getWebSocketBase()}/ws/presence/`
+    return `${base}?auth=${user ? '1' : '0'}`
+  }, [user])
 
   const handlePresence = useCallback((event: MessageEvent) => {
     try {
       const data = JSON.parse(event.data)
       if (Array.isArray(data?.online)) {
         setOnlineUsers(data.online)
+      }
+      const rawGuests = data?.guests
+      const parsedGuests =
+        typeof rawGuests === 'number' ? rawGuests : Number.isFinite(Number(rawGuests)) ? Number(rawGuests) : null
+      if (parsedGuests !== null) {
+        setGuestCount(parsedGuests)
       }
     } catch (err) {
       debugLog('Presence WS parse failed', err)
@@ -37,10 +47,11 @@ export function PresenceProvider({ user, children }: ProviderProps) {
   const value = useMemo(
     () => ({
       online: user ? onlineUsers : [],
+      guests: guestCount,
       status,
       lastError,
     }),
-    [onlineUsers, status, lastError, user],
+    [onlineUsers, guestCount, status, lastError, user],
   )
 
   return <PresenceContext.Provider value={value}>{children}</PresenceContext.Provider>

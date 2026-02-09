@@ -26,7 +26,7 @@ export function HomePage({ user, onNavigate }: Props) {
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const tempIdRef = useRef(0)
-  const { online } = usePresence()
+  const { online, guests } = usePresence()
 
   const visiblePublicRoom = useMemo(() => publicRoom, [publicRoom])
   const isLoading = useMemo(() => loading, [loading])
@@ -274,6 +274,7 @@ export function HomePage({ user, onNavigate }: Props) {
             </div>
             <span className="pill">{user ? online.length : '—'}</span>
           </div>
+          <p className="muted">Гостей онлайн — {guests}</p>
           {!user ? (
             <p className="muted">Войдите, чтобы видеть участников онлайн.</p>
           ) : online.length ? (

@@ -169,36 +169,57 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
 
 class PresenceConsumer(AsyncWebsocketConsumer):
-    group_name = "presence"
+    group_name_auth = "presence_auth"
+    group_name_guest = "presence_guest"
     cache_key = "presence:online"
+    guest_cache_key = "presence:guests"
 
     async def connect(self):
         user = self.scope.get("user")
-        if not user or not user.is_authenticated:
-            await self.close()
-            return
+        self.is_guest = not user or not user.is_authenticated
+        self.group_name = (
+            self.group_name_guest if self.is_guest else self.group_name_auth
+        )
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
-        await self._add_user(user)
+
+        if self.is_guest:
+            await self._add_guest()
+        else:
+            await self._add_user(user)
         await self._broadcast()
 
     async def disconnect(self, close_code):
         user = self.scope.get("user")
-        if user and user.is_authenticated:
+        if self.is_guest:
+            await self._remove_guest()
+        elif user and user.is_authenticated:
             await self._remove_user(user)
-            await self._broadcast()
+
+        await self._broadcast()
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
     async def _broadcast(self):
         online = await self._get_online()
+        guests = await self._get_guest_count()
         await self.channel_layer.group_send(
-            self.group_name,
-            {"type": "presence.update", "online": online},
+            self.group_name_guest,
+            {"type": "presence.update", "guests": guests},
+        )
+        await self.channel_layer.group_send(
+            self.group_name_auth,
+            {"type": "presence.update", "online": online, "guests": guests},
         )
 
     async def presence_update(self, event):
-        await self.send(text_data=json.dumps({"online": event["online"]}))
+        payload = {}
+        if "online" in event:
+            payload["online"] = event["online"]
+        if "guests" in event:
+            payload["guests"] = event["guests"]
+        if payload:
+            await self.send(text_data=json.dumps(payload))
 
     @sync_to_async
     def _add_user(self, user):
@@ -232,5 +253,36 @@ class PresenceConsumer(AsyncWebsocketConsumer):
             {"username": username, "profileImage": info.get("profileImage")}
             for username, info in cleaned.items()
         ]
+
+    @sync_to_async
+    def _add_guest(self):
+        count = cache.get(self.guest_cache_key, 0) or 0
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            count = 0
+        count += 1
+        cache.set(self.guest_cache_key, count, timeout=60 * 60)
+
+    @sync_to_async
+    def _remove_guest(self):
+        count = cache.get(self.guest_cache_key, 0) or 0
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            count = 0
+        count -= 1
+        if count <= 0:
+            cache.delete(self.guest_cache_key)
+        else:
+            cache.set(self.guest_cache_key, count, timeout=60 * 60)
+
+    @sync_to_async
+    def _get_guest_count(self) -> int:
+        count = cache.get(self.guest_cache_key, 0) or 0
+        try:
+            return max(0, int(count))
+        except (TypeError, ValueError):
+            return 0
 
     # build_profile_url moved to chat.utils to avoid duplication
