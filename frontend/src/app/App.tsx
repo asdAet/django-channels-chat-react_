@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth'
 import { usePasswordRules } from '../hooks/usePasswordRules'
 import type { ApiError } from '../shared/api/types'
 import { debugLog } from '../shared/lib/debug'
+import { PresenceProvider } from '../shared/presence'
 
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname))
@@ -169,23 +170,25 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
-      <TopBar user={auth.user} onNavigate={handleNavigate} onLogout={handleLogout} />
-      <main className="content">
-        {auth.loading && <div className="panel muted">Проверяем сессию...</div>}
-        {banner && (
-          <div className="toast success" role="status">
-            {banner}
-          </div>
-        )}
-        {error && route.name !== 'login' && route.name !== 'register' && (
-          <div className="toast danger" role="alert">
-            {error}
-          </div>
-        )}
-        {renderRoute()}
-      </main>
-    </div>
+    <PresenceProvider user={auth.user}>
+      <div className="app-shell">
+        <TopBar user={auth.user} onNavigate={handleNavigate} onLogout={handleLogout} />
+        <main className="content">
+          {auth.loading && <div className="panel muted">Проверяем сессию...</div>}
+          {banner && (
+            <div className="toast success" role="status">
+              {banner}
+            </div>
+          )}
+          {error && route.name !== 'login' && route.name !== 'register' && (
+            <div className="toast danger" role="alert">
+              {error}
+            </div>
+          )}
+          {renderRoute()}
+        </main>
+      </div>
+    </PresenceProvider>
   )
 }
 

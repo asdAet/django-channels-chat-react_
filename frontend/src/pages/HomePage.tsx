@@ -2,7 +2,6 @@
 import type { UserProfile } from '../entities/user/types'
 import { debugLog } from '../shared/lib/debug'
 import type { Message } from '../entities/message/types'
-import type { OnlineUser } from '../shared/api/users'
 import type { ApiError } from '../shared/api/types'
 import { usePublicRoom } from '../hooks/usePublicRoom'
 import { useChatActions } from '../hooks/useChatActions'
@@ -10,6 +9,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import { useReconnectingWebSocket } from '../hooks/useReconnectingWebSocket'
 import { sanitizeText } from '../shared/lib/sanitize'
 import { getWebSocketBase } from '../shared/lib/ws'
+import { usePresence } from '../shared/presence'
 
 type Props = {
   user: UserProfile | null
@@ -23,10 +23,10 @@ export function HomePage({ user, onNavigate }: Props) {
   const { getRoomDetails, getRoomMessages } = useChatActions()
   const isOnline = useOnlineStatus()
   const [liveMessages, setLiveMessages] = useState<Message[]>([])
-  const [online, setOnline] = useState<OnlineUser[]>([])
   const [creatingRoom, setCreatingRoom] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const tempIdRef = useRef(0)
+  const { online } = usePresence()
 
   const visiblePublicRoom = useMemo(() => publicRoom, [publicRoom])
   const isLoading = useMemo(() => loading, [loading])
@@ -93,28 +93,6 @@ export function HomePage({ user, onNavigate }: Props) {
     url: liveUrl,
     onMessage: handleLiveMessage,
     onError: (err) => debugLog('Live feed WS error', err),
-  })
-
-  const presenceUrl = useMemo(() => {
-    if (!user) return null
-    return `${getWebSocketBase()}/ws/presence/`
-  }, [user])
-
-  const handlePresence = useCallback((event: MessageEvent) => {
-    try {
-      const data = JSON.parse(event.data)
-      if (data.online) {
-        setOnline(data.online)
-      }
-    } catch (err) {
-      debugLog('Presence WS parse failed', err)
-    }
-  }, [])
-
-  useReconnectingWebSocket({
-    url: presenceUrl,
-    onMessage: handlePresence,
-    onError: (err) => debugLog('Presence WS error', err),
   })
 
   const createRoomSlug = (length = 12) => {
