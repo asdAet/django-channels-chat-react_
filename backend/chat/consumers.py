@@ -180,12 +180,13 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         self.group_name = (
             self.group_name_guest if self.is_guest else self.group_name_auth
         )
+        self.guest_ip = self._get_client_ip() if self.is_guest else None
 
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
         if self.is_guest:
-            await self._add_guest()
+            await self._add_guest(self.guest_ip)
         else:
             await self._add_user(user)
         await self._broadcast()
@@ -193,7 +194,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         user = self.scope.get("user")
         if self.is_guest:
-            await self._remove_guest()
+            await self._remove_guest(self.guest_ip)
         elif user and user.is_authenticated:
             await self._remove_user(user)
 
@@ -255,34 +256,66 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         ]
 
     @sync_to_async
-    def _add_guest(self):
-        count = cache.get(self.guest_cache_key, 0) or 0
+    def _add_guest(self, ip: str | None):
+        if not ip:
+            return
+        data = cache.get(self.guest_cache_key, {}) or {}
+        current = data.get(ip, 0)
         try:
-            count = int(count)
+            current = int(current)
         except (TypeError, ValueError):
-            count = 0
-        count += 1
-        cache.set(self.guest_cache_key, count, timeout=60 * 60)
+            current = 0
+        data[ip] = current + 1
+        cache.set(self.guest_cache_key, data, timeout=60 * 60)
 
     @sync_to_async
-    def _remove_guest(self):
-        count = cache.get(self.guest_cache_key, 0) or 0
+    def _remove_guest(self, ip: str | None):
+        if not ip:
+            return
+        data = cache.get(self.guest_cache_key, {}) or {}
+        current = data.get(ip, 0)
         try:
-            count = int(count)
+            current = int(current)
         except (TypeError, ValueError):
-            count = 0
-        count -= 1
-        if count <= 0:
-            cache.delete(self.guest_cache_key)
+            current = 0
+        current -= 1
+        if current <= 0:
+            data.pop(ip, None)
         else:
-            cache.set(self.guest_cache_key, count, timeout=60 * 60)
+            data[ip] = current
+        if data:
+            cache.set(self.guest_cache_key, data, timeout=60 * 60)
+        else:
+            cache.delete(self.guest_cache_key)
 
     @sync_to_async
     def _get_guest_count(self) -> int:
-        count = cache.get(self.guest_cache_key, 0) or 0
+        data = cache.get(self.guest_cache_key, {}) or {}
         try:
-            return max(0, int(count))
+            return len([ip for ip, count in data.items() if int(count) > 0])
         except (TypeError, ValueError):
-            return 0
+            cleaned = {ip: c for ip, c in data.items() if isinstance(c, int) and c > 0}
+            if cleaned != data:
+                cache.set(self.guest_cache_key, cleaned, timeout=60 * 60)
+            return len(cleaned)
+
+    def _get_client_ip(self) -> str | None:
+        headers = self.scope.get("headers", [])
+        ip = None
+        for header, value in headers:
+            if header == b"x-forwarded-for":
+                try:
+                    ip = value.decode("utf-8")
+                except UnicodeDecodeError:
+                    ip = value.decode("latin-1", errors="ignore")
+                break
+        if ip:
+            ip = ip.split(",")[0].strip()
+            if ip:
+                return ip
+        client = self.scope.get("client")
+        if client and isinstance(client, (list, tuple)) and client:
+            return str(client[0])
+        return None
 
     # build_profile_url moved to chat.utils to avoid duplication
