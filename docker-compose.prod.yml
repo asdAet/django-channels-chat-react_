@@ -19,7 +19,7 @@ services:
       DJANGO_DB_PASSWORD: "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}"
       DJANGO_DB_HOST: "postgres"
       DJANGO_DB_PORT: "5432"
-      REDIS_URL: "redis://redis:6379/0"
+      #REDIS_URL: "redis://redis:6379/0"
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
