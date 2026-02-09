@@ -110,14 +110,14 @@ ASGI_APPLICATION = 'chat_app_django.asgi.application'
 REDIS_URL = os.getenv("REDIS_URL")  
      
    
-    if REDIS_URL:  
+if REDIS_URL:  
         CHANNEL_LAYERS = {  
             "default": {  
                 "BACKEND": "channels_redis.core.RedisChannelLayer",  
                 "CONFIG": {"hosts": [REDIS_URL]},  
             }  
         }  
-    else:  
+else:  
         CHANNEL_LAYERS = {  
             "default": {  
                 "BACKEND": "channels.layers.InMemoryChannelLayer"  
