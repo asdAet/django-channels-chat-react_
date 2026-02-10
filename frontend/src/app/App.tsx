@@ -57,11 +57,15 @@ export function App() {
           .flat()
           .join(' ')
       }
+      const rawMessage = typeof apiErr.message === 'string' ? apiErr.message.trim() : ''
+      if (rawMessage && !rawMessage.includes('status code 400')) {
+        return rawMessage
+      }
+      if (apiErr.data && typeof apiErr.data.error === 'string') {
+        return apiErr.data.error
+      }
       if (apiErr.status === 400) {
         return fallback
-      }
-      if (typeof apiErr.message === 'string') {
-        return apiErr.message
       }
     }
     return fallback

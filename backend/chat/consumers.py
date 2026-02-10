@@ -173,6 +173,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
     group_name_guest = "presence_guest"
     cache_key = "presence:online"
     guest_cache_key = "presence:guests"
+    presence_ttl = int(getattr(settings, "PRESENCE_TTL", 90))
 
     async def connect(self):
         user = self.scope.get("user")
@@ -200,6 +201,24 @@ class PresenceConsumer(AsyncWebsocketConsumer):
 
         await self._broadcast()
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def receive(self, text_data=None, bytes_data=None):
+        if not text_data:
+            return
+        try:
+            payload = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+        if payload.get("type") != "ping":
+            return
+
+        user = self.scope.get("user")
+        if self.is_guest:
+            await self._touch_guest(self.guest_ip)
+        elif user and user.is_authenticated:
+            await self._touch_user(user)
+
+        await self._broadcast()
 
     async def _broadcast(self):
         online = await self._get_online()
@@ -230,7 +249,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         image_name = getattr(getattr(user, "profile", None), "image", None)
         image_name = image_name.name if image_name else ""
         image_url = build_profile_url(self.scope, image_name) if image_name else None
-        data[user.username] = {"count": count, "profileImage": image_url}
+        data[user.username] = {"count": count, "profileImage": image_url, "last_seen": time.time()}
         cache.set(self.cache_key, data, timeout=60 * 60)
 
     @sync_to_async
@@ -242,12 +261,22 @@ class PresenceConsumer(AsyncWebsocketConsumer):
                 data.pop(user.username, None)
             else:
                 data[user.username]["count"] = count
+                data[user.username]["last_seen"] = time.time()
             cache.set(self.cache_key, data, timeout=60 * 60)
 
     @sync_to_async
     def _get_online(self):
         data = cache.get(self.cache_key, {})
-        cleaned = {k: v for k, v in data.items() if v.get("count", 0) > 0}
+        now = time.time()
+        cleaned = {}
+        for username, info in data.items():
+            try:
+                count = int(info.get("count", 0))
+            except (TypeError, ValueError):
+                count = 0
+            last_seen = info.get("last_seen", 0)
+            if count > 0 and (now - last_seen) <= self.presence_ttl:
+                cleaned[username] = info
         if cleaned != data:
             cache.set(self.cache_key, cleaned, timeout=60 * 60)
         return [
@@ -260,12 +289,12 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         if not ip:
             return
         data = cache.get(self.guest_cache_key, {}) or {}
-        current = data.get(ip, 0)
+        current = data.get(ip, {})
         try:
-            current = int(current)
-        except (TypeError, ValueError):
-            current = 0
-        data[ip] = current + 1
+            count = int(current.get("count", 0))
+        except (TypeError, ValueError, AttributeError):
+            count = 0
+        data[ip] = {"count": count + 1, "last_seen": time.time()}
         cache.set(self.guest_cache_key, data, timeout=60 * 60)
 
     @sync_to_async
@@ -273,16 +302,16 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         if not ip:
             return
         data = cache.get(self.guest_cache_key, {}) or {}
-        current = data.get(ip, 0)
+        current = data.get(ip, {})
         try:
-            current = int(current)
-        except (TypeError, ValueError):
-            current = 0
-        current -= 1
-        if current <= 0:
+            count = int(current.get("count", 0))
+        except (TypeError, ValueError, AttributeError):
+            count = 0
+        count -= 1
+        if count <= 0:
             data.pop(ip, None)
         else:
-            data[ip] = current
+            data[ip] = {"count": count, "last_seen": time.time()}
         if data:
             cache.set(self.guest_cache_key, data, timeout=60 * 60)
         else:
@@ -291,13 +320,47 @@ class PresenceConsumer(AsyncWebsocketConsumer):
     @sync_to_async
     def _get_guest_count(self) -> int:
         data = cache.get(self.guest_cache_key, {}) or {}
-        try:
-            return len([ip for ip, count in data.items() if int(count) > 0])
-        except (TypeError, ValueError):
-            cleaned = {ip: c for ip, c in data.items() if isinstance(c, int) and c > 0}
-            if cleaned != data:
-                cache.set(self.guest_cache_key, cleaned, timeout=60 * 60)
-            return len(cleaned)
+        now = time.time()
+        cleaned = {}
+        for ip, info in data.items():
+            try:
+                count = int(info.get("count", 0))
+            except (TypeError, ValueError, AttributeError):
+                count = 0
+            last_seen = info.get("last_seen", 0)
+            if count > 0 and (now - last_seen) <= self.presence_ttl:
+                cleaned[ip] = info
+        if cleaned != data:
+            cache.set(self.guest_cache_key, cleaned, timeout=60 * 60)
+        return len(cleaned)
+
+    @sync_to_async
+    def _touch_user(self, user):
+        data = cache.get(self.cache_key, {})
+        current = data.get(user.username)
+        image_name = getattr(getattr(user, "profile", None), "image", None)
+        image_name = image_name.name if image_name else ""
+        image_url = build_profile_url(self.scope, image_name) if image_name else None
+        if not current:
+            data[user.username] = {"count": 1, "profileImage": image_url, "last_seen": time.time()}
+        else:
+            current["last_seen"] = time.time()
+            if image_url:
+                current["profileImage"] = image_url
+            data[user.username] = current
+        cache.set(self.cache_key, data, timeout=60 * 60)
+
+    @sync_to_async
+    def _touch_guest(self, ip: str | None):
+        if not ip:
+            return
+        data = cache.get(self.guest_cache_key, {}) or {}
+        current = data.get(ip)
+        if not current:
+            data[ip] = {"count": 1, "last_seen": time.time()}
+        else:
+            data[ip] = {"count": current.get("count", 1), "last_seen": time.time()}
+        cache.set(self.guest_cache_key, data, timeout=60 * 60)
 
     def _decode_header(self, value: bytes | None) -> str | None:
         if not value:

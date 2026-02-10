@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import type { UserProfile } from '../../entities/user/types'
@@ -38,11 +38,21 @@ export function PresenceProvider({ user, children }: ProviderProps) {
     }
   }, [])
 
-  const { status, lastError } = useReconnectingWebSocket({
+  const { status, lastError, send } = useReconnectingWebSocket({
     url: presenceUrl,
     onMessage: handlePresence,
     onError: (err) => debugLog('Presence WS error', err),
   })
+
+  useEffect(() => {
+    if (status !== 'online') return
+    const sendPing = () => {
+      send(JSON.stringify({ type: 'ping', ts: Date.now() }))
+    }
+    sendPing()
+    const id = window.setInterval(sendPing, 20000)
+    return () => window.clearInterval(id)
+  }, [send, status])
 
   const value = useMemo(
     () => ({
