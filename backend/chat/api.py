@@ -35,7 +35,7 @@ def _build_profile_pic_url(request, profile_pic, username: str | None = None):
     if url.startswith("http://") or url.startswith("https://"):
         return url
 
-    media_prefix = settings.MEDIA_URL or "/media/"
+    media_prefix = settings.MEDIA_URL or ":8443/media/"
     path = url
     if media_prefix and path.startswith(media_prefix):
         path = path[len(media_prefix):]
