@@ -5,6 +5,7 @@ services:
       dockerfile: backend/Dockerfile
     environment:
       DJANGO_DEBUG: "1"
+      DJANGO_RELAX_PASSWORDS: "1"
       DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:?set DJANGO_SECRET_KEY in .env}"
       DJANGO_ALLOWED_HOSTS: "slowed.sbs,proxy.slowed.sbs"
       DJANGO_CSRF_TRUSTED_ORIGINS: "https://slowed.sbs,https://proxy.slowed.sbs"
