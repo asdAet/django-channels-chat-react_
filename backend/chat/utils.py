@@ -56,7 +56,7 @@ def build_profile_url(scope, image_name: str | None) -> str | None:
     if not host_val:
         host_val = _first_value(_get_header(scope, b"host"))
 
-    server = scope.get("server") or (8443)
+    server = scope.get("server") or (None, None)
     host_from_server, port_from_server = server
 
     if not host_val and host_from_server:
@@ -68,6 +68,6 @@ def build_profile_url(scope, image_name: str | None) -> str | None:
         scheme = "https" if scope.get("scheme") in {"wss", "https"} else "http"
 
     if host_val:
-        return f"{scheme}://{host_val}{path}"
+        return f"{scheme}://{host_val}:8443{path}"
 
     return path
