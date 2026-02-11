@@ -107,6 +107,22 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
     return () => window.clearInterval(id)
   }, [rateLimitUntil])
 
+  useEffect(() => {
+    if (!user) return
+    const nextProfile = user.profileImage || null
+    const username = user.username
+    setMessages((prev) => {
+      let changed = false
+      const updated = prev.map((msg) => {
+        if (msg.username !== username) return msg
+        if (msg.profilePic === nextProfile) return msg
+        changed = true
+        return { ...msg, profilePic: nextProfile }
+      })
+      return changed ? updated : prev
+    })
+  }, [user, setMessages])
+
   const handleScroll = useCallback(() => {
     const list = listRef.current
     if (!list) return
@@ -174,21 +190,6 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
     setDraft('')
   }
 
-  if (!user && !isPublicRoom) {
-    return (
-      <div className="panel">
-        <p>Чтобы войти в комнату, авторизуйтесь.</p>
-        <div className="actions">
-          <button className="btn primary" onClick={() => onNavigate('/login')}>
-            Войти
-          </button>
-          <button className="btn ghost" onClick={() => onNavigate('/register')}>
-            Регистрация
-          </button>
-        </div>
-      </div>
-    )
-  }
 
   const loadError = error ? 'Не удалось загрузить комнату' : null
   const visibleError = roomError || loadError
@@ -196,7 +197,7 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
   const statusLabel = (() => {
     switch (status) {
       case 'online':
-        return 'WebSocket online'
+        return 'WebSocket онлайн'
       case 'connecting':
         return 'Подключаемся...'
       case 'offline':
@@ -239,6 +240,23 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
 
     return items
   }, [messages])
+
+
+  if (!user && !isPublicRoom) {
+    return (
+      <div className="panel">
+        <p>Чтобы войти в комнату, авторизуйтесь.</p>
+        <div className="actions">
+          <button className="btn primary" onClick={() => onNavigate('/login')}>
+            Войти
+          </button>
+          <button className="btn ghost" onClick={() => onNavigate('/register')}>
+            Регистрация
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="chat">
@@ -300,7 +318,7 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
                   <button
                     type="button"
                     className="avatar_link"
-                    aria-label={`??????? ??????? ${item.message.username}`}
+                    aria-label={`Открыть профиль пользователя ${item.message.username}`}
                     onClick={() => openUserProfile(item.message.username)}
                   >
                     <div className="avatar small">
@@ -330,7 +348,7 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
                 </p>
               </div>
             </div>
-            )}
+          )}
           {user && (
             <div className={`chat-input${rateLimitActive ? ' blocked' : ''}`}>
               <input

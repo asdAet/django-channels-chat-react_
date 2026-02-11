@@ -1,25 +1,32 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { avatarFallback } from '../shared/lib/format';
 import type { UserProfile } from '../entities/user/types';
 
+type SaveResult =
+  | { ok: true }
+  | { ok: false; errors?: Record<string, string[]>; message?: string };
+
 type Props = {
   user: UserProfile | null;
-  onLogout: () => void;
   onSave: (fields: {
     username: string;
     email: string;
     image?: File | null;
     bio?: string;
-  }) => void;
+  }) => Promise<SaveResult>;
   onNavigate: (path: string) => void;
+  onLogout?: () => void;
 };
 
-export function ProfilePage({ user, onSave, onNavigate, onLogout}: Props) {
+export function ProfilePage({ user, onSave, onNavigate, onLogout }: Props) {
   const [form, setForm] = useState({
     username: user?.username || '',
     email: user?.email || '',
     bio: user?.bio || '',
   });
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+
   const isUsernameValid = form.username.trim().length > 0;
   const isBioValid = form.bio.length <= 1000;
 
@@ -29,6 +36,15 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout}: Props) {
     user?.profileImage || null
   );
 
+  const clearFieldError = (field: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
   useEffect(() => {
     // Clean blob URLs on unmount or when preview changes
     return () => {
@@ -37,6 +53,13 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout}: Props) {
       }
     };
   }, [previewUrl]);
+
+  useEffect(() => {
+    if (!formError) return;
+    if (!formError.includes('Проверьте введённые данные')) return;
+    const t = window.setTimeout(() => setFormError(null), 4200);
+    return () => window.clearTimeout(t);
+  }, [formError]);
 
   if (!user) {
     return (
@@ -54,11 +77,24 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout}: Props) {
     );
   }
 
+  const usernameError = fieldErrors.username?.[0];
+  const emailError = fieldErrors.email?.[0];
+  const bioError = fieldErrors.bio?.[0];
+  const imageError = fieldErrors.image?.[0];
+  const genericError =
+    formError || fieldErrors.non_field_errors?.[0] || fieldErrors.__all__?.[0];
+
   return (
     <div className="card wide">
       <div>
         <p className="eyebrow_profile">Профиль</p>
       </div>
+
+      {genericError && (
+        <div className="toast danger" role="alert">
+          {genericError}
+        </div>
+      )}
 
       <div className="profile_avatar_wrapper">
         <div
@@ -90,6 +126,8 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout}: Props) {
           onChange={(e) => {
             const file = e.target.files?.[0] || null;
             setImage(file);
+            setFormError(null);
+            clearFieldError('image');
             setPreviewUrl((prev) => {
               if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
               return file
@@ -99,40 +137,69 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout}: Props) {
           }}
         />
       </div>
+      {imageError && <p className="note error">{imageError}</p>}
 
       <form
         className="form two-col"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          onSave({ ...form, image, bio: form.bio });
+          setFormError(null);
+          const result = await onSave({ ...form, image, bio: form.bio });
+          if (result.ok) {
+            setFieldErrors({});
+            return;
+          }
+          if (result.errors) {
+            setFieldErrors(result.errors);
+          } else {
+            setFieldErrors({});
+          }
+          if (result.message) {
+            setFormError(result.message);
+          }
         }}
       >
-        <label className="field">
+        <label className={`field ${usernameError ? 'error' : ''}`}>
           <span>Имя пользователя</span>
           <input
             type="text"
             value={form.username}
-            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            onChange={(e) => {
+              setForm({ ...form, username: e.target.value });
+              setFormError(null);
+              clearFieldError('username');
+            }}
           />
+          {usernameError && <span className="note error">{usernameError}</span>}
         </label>
-        <label className="field">
+        <label className={`field ${emailError ? 'error' : ''}`}>
           <span>Email</span>
           <input
             type="email"
             value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
+            onChange={(e) => {
+              setForm({ ...form, email: e.target.value });
+              setFormError(null);
+              clearFieldError('email');
+            }}
           />
+          {emailError && <span className="note error">{emailError}</span>}
         </label>
-        <label className="field full">
+        <label className={`field full ${bioError ? 'error' : ''}`}>
           <span>О себе</span>
           <textarea
             value={form.bio}
-            onChange={(e) => setForm({ ...form, bio: e.target.value })}
+            onChange={(e) => {
+              setForm({ ...form, bio: e.target.value });
+              setFormError(null);
+              clearFieldError('bio');
+            }}
             placeholder="Расскажите пару слов о себе"
           />
           {!isBioValid && (
             <span className="note warning">Максимум 1000 символов.</span>
           )}
+          {bioError && <span className="note error">{bioError}</span>}
         </label>
         <div className="actions">
           <button className="btn primary" type="submit" disabled={!isUsernameValid || !isBioValid}>
@@ -145,10 +212,11 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout}: Props) {
           >
             На главную
           </button>
-
-          <button className="btn logaut" type="button" onClick={onLogout}>
-            Выйти
-          </button>
+          {onLogout && (
+            <button className="btn logaut" type="button" onClick={onLogout}>
+              Выйти
+            </button>
+          )}
         </div>
       </form>
     </div>

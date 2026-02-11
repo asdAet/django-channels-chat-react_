@@ -13,6 +13,11 @@ import type { ApiError } from '../shared/api/types'
 import { debugLog } from '../shared/lib/debug'
 import { PresenceProvider } from '../shared/presence'
 
+type ProfileFieldErrors = Record<string, string[]>
+type ProfileSaveResult =
+  | { ok: true }
+  | { ok: false; errors?: ProfileFieldErrors; message?: string }
+
 export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname))
   const { auth, login, register, logout, updateProfile } = useAuth()
@@ -83,6 +88,24 @@ export function App() {
     return fallback
   }
 
+  const extractProfileErrors = (err: unknown): ProfileFieldErrors | null => {
+    if (!err || typeof err !== 'object') return null
+    const anyErr = err as ApiError & { response?: { data?: unknown } }
+    const data = (anyErr.data ?? anyErr.response?.data) as Record<string, unknown> | undefined
+    const rawErrors = data && (data.errors as Record<string, unknown> | undefined)
+    if (!rawErrors || typeof rawErrors !== 'object') return null
+    const normalized: ProfileFieldErrors = {}
+    for (const [field, value] of Object.entries(rawErrors)) {
+      if (Array.isArray(value)) {
+        const messages = value.filter((item) => typeof item === 'string') as string[]
+        if (messages.length) normalized[field] = messages
+      } else if (typeof value === 'string') {
+        normalized[field] = [value]
+      }
+    }
+    return Object.keys(normalized).length ? normalized : null
+  }
+
   const handleNavigate = (path: string) => navigate(path, setRoute)
 
   const handleLogin = async (username: string, password: string) => {
@@ -120,21 +143,26 @@ export function App() {
     email: string
     image?: File | null
     bio?: string
-  }) => {
-    if (!auth.user) return
+  }): Promise<ProfileSaveResult> => {
+    if (!auth.user) return { ok: false, message: 'Сначала войдите в аккаунт.' }
     setError(null)
     try {
       await updateProfile(fields)
       setBanner('Профиль обновлен')
+      return { ok: true }
     } catch (err) {
       debugLog('Profile update failed', err)
       const apiErr = err as ApiError
       if (apiErr && typeof apiErr.status === 'number' && apiErr.status === 401) {
         setError('Сессия истекла. Войдите снова.')
         handleNavigate('/login')
-        return
+        return { ok: false, message: 'Сессия истекла. Войдите снова.' }
       }
-      setError(extractMessage(err))
+      const fieldErrors = extractProfileErrors(err)
+      if (fieldErrors) {
+        return { ok: false, errors: fieldErrors }
+      }
+      return { ok: false, message: extractMessage(err) }
     }
   }
 
@@ -176,9 +204,11 @@ export function App() {
         return (
           <UserProfilePage
             key={route.username}
+            user={auth.user}
             username={route.username}
             currentUser={auth.user}
             onNavigate={handleNavigate}
+            onLogout={handleLogout}
           />
         )
       case 'room':

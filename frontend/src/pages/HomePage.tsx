@@ -320,7 +320,7 @@ export function HomePage({ user, onNavigate }: Props) {
                   <button
                     type="button"
                     className="avatar_link"
-                    aria-label={`??????? ??????? ${u.username}`}
+                    aria-label={`Открыть профиль пользователя ${u.username}`}
                     onClick={() => openUserProfile(u.username)}
                   >
                     <div className="avatar tiny">

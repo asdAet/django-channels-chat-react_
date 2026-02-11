@@ -27,7 +27,19 @@ export function PresenceProvider({ user, children, ready = true }: ProviderProps
     try {
       const data = JSON.parse(event.data)
       if (Array.isArray(data?.online)) {
-        setOnlineUsers(data.online)
+        const incoming = data.online
+        if (user) {
+          const nextImage = user.profileImage || null
+          setOnlineUsers(
+            incoming.map((entry) =>
+              entry.username === user.username
+                ? { ...entry, profileImage: nextImage }
+                : entry,
+            ),
+          )
+        } else {
+          setOnlineUsers(incoming)
+        }
       }
       const rawGuests = data?.guests
       const parsedGuests =
@@ -38,7 +50,7 @@ export function PresenceProvider({ user, children, ready = true }: ProviderProps
     } catch (err) {
       debugLog('Presence WS parse failed', err)
     }
-  }, [])
+  }, [user])
 
 
   useEffect(() => {
@@ -47,6 +59,21 @@ export function PresenceProvider({ user, children, ready = true }: ProviderProps
       setGuestCount(0)
     }
   }, [ready])
+  useEffect(() => {
+    if (!user) return
+    setOnlineUsers((prev) => {
+      let changed = false
+      const updated = prev.map((entry) => {
+        if (entry.username !== user.username) return entry
+        const nextImage = user.profileImage || null
+        if (entry.profileImage === nextImage) return entry
+        changed = true
+        return { ...entry, profileImage: nextImage }
+      })
+      return changed ? updated : prev
+    })
+  }, [user])
+
   const { status, lastError, send } = useReconnectingWebSocket({
     url: presenceUrl,
     onMessage: handlePresence,

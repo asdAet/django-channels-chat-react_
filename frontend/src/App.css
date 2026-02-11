@@ -638,12 +638,24 @@ button:focus {
   color: #ffd18a;
 }
 
+.note.error {
+  color: #ffb4b4;
+}
+
+.field.error input,
+.field.error textarea {
+  border-color: rgba(248, 113, 113, 0.6);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.25);
+}
+
 .muted {
   color: #9eb0c7;
 }
 
 .bio-text {
   white-space: pre-wrap;
+  line-height: 1.6;
+  word-spacing: 0.06em;
 }
 
 .panel {
