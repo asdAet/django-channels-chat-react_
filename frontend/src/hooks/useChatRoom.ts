@@ -1,7 +1,7 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { chatController } from '../controllers/ChatController'
-import type { RoomDetailsDto } from '../dto/chat'
+import type { RoomDetailsDto, RoomMessagesDto } from '../dto/chat'
 import type { Message } from '../entities/message/types'
 import type { UserProfileDto } from '../dto/auth'
 import { debugLog } from '../shared/lib/debug'
@@ -29,12 +29,27 @@ const dedupeMessages = (messages: Message[]) => {
   return unique
 }
 
+const resolveHasMore = (payload: RoomMessagesDto, fetched: Message[]) => {
+  if (typeof payload.pagination?.hasMore === 'boolean') {
+    return payload.pagination.hasMore
+  }
+  return fetched.length >= PAGE_SIZE
+}
+
+const resolveNextBefore = (payload: RoomMessagesDto, fetched: Message[]) => {
+  const nextBefore = payload.pagination?.nextBefore
+  if (typeof nextBefore === 'number') return nextBefore
+  if (nextBefore === null) return null
+  return fetched.length > 0 ? fetched[0].id : null
+}
+
 export type ChatRoomState = {
   details: RoomDetailsDto | null
   messages: Message[]
   loading: boolean
   loadingMore: boolean
   hasMore: boolean
+  nextBefore: number | null
   error: string | null
 }
 
@@ -47,6 +62,7 @@ export const useChatRoom = (slug: string, user: UserProfileDto | null) => {
     loading: true,
     loadingMore: false,
     hasMore: true,
+    nextBefore: null,
     error: null,
   })
   const requestIdRef = useRef(0)
@@ -69,7 +85,8 @@ export const useChatRoom = (slug: string, user: UserProfileDto | null) => {
           messages: unique,
           loading: false,
           loadingMore: false,
-          hasMore: unique.length >= PAGE_SIZE,
+          hasMore: resolveHasMore(payload, unique),
+          nextBefore: resolveNextBefore(payload, unique),
           error: null,
         })
       })
@@ -88,9 +105,9 @@ export const useChatRoom = (slug: string, user: UserProfileDto | null) => {
     if (!canView) return
     if (state.loadingMore || !state.hasMore) return
 
-    const oldestId = state.messages[0]?.id
-    if (!oldestId) {
-      setState((prev) => ({ ...prev, hasMore: false }))
+    const cursor = state.nextBefore
+    if (!cursor) {
+      setState((prev) => ({ ...prev, hasMore: false, nextBefore: null }))
       return
     }
 
@@ -99,7 +116,7 @@ export const useChatRoom = (slug: string, user: UserProfileDto | null) => {
     try {
       const payload = await chatController.getRoomMessages(slug, {
         limit: PAGE_SIZE,
-        beforeId: oldestId,
+        beforeId: cursor,
       })
       if (requestId !== requestIdRef.current) return
       const sanitized = payload.messages.map(sanitizeMessage)
@@ -107,14 +124,15 @@ export const useChatRoom = (slug: string, user: UserProfileDto | null) => {
         ...prev,
         messages: dedupeMessages([...sanitized, ...prev.messages]),
         loadingMore: false,
-        hasMore: sanitized.length >= PAGE_SIZE,
+        hasMore: resolveHasMore(payload, sanitized),
+        nextBefore: resolveNextBefore(payload, sanitized),
       }))
     } catch (err) {
       if (requestId !== requestIdRef.current) return
       debugLog('Room load more failed', err)
       setState((prev) => ({ ...prev, loadingMore: false }))
     }
-  }, [slug, canView, state.hasMore, state.loadingMore, state.messages])
+  }, [slug, canView, state.hasMore, state.loadingMore, state.nextBefore])
 
   const setMessages = useCallback((updater: Message[] | ((prev: Message[]) => Message[])) => {
     setState((prev) => {

@@ -18,7 +18,7 @@ import { getUserProfile } from './apiService/getUserProfile'
 
 const API_BASE = '/api'
 
-let csrfTokenCache: string | null = null
+const CSRF_STORAGE_KEY = 'csrfToken'
 
 const getCookie = (name: string) => {
   if (typeof document === 'undefined') return null
@@ -29,10 +29,21 @@ const getCookie = (name: string) => {
     ?.split('=')[1]
 }
 
-const getCsrfToken = () => csrfTokenCache || getCookie('csrftoken')
-const setCsrfToken = (token: string | null) => {
-  csrfTokenCache = token
+const getStoredCsrf = () => {
+  if (typeof sessionStorage === 'undefined') return null
+  return sessionStorage.getItem(CSRF_STORAGE_KEY)
 }
+
+const getCsrfToken = () => getCookie('csrftoken') || getStoredCsrf()
+const setCsrfToken = (token: string | null) => {
+  if (typeof sessionStorage === 'undefined') return
+  if (!token) {
+    sessionStorage.removeItem(CSRF_STORAGE_KEY)
+    return
+  }
+  sessionStorage.setItem(CSRF_STORAGE_KEY, token)
+}
+
 
 const parseJson = (text: string): unknown => {
   try {

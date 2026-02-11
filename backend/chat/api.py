@@ -1,70 +1,32 @@
 import re
 
-from django.http import JsonResponse
-from django.db import OperationalError, ProgrammingError, IntegrityError
-from django.core.exceptions import ObjectDoesNotExist
-from django.views.decorators.http import require_http_methods
-from django.core.files.storage import default_storage
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, OperationalError, ProgrammingError
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
 
 from .constants import PUBLIC_ROOM_NAME, PUBLIC_ROOM_SLUG
 from .models import Message, Room
+from .utils import build_profile_url_from_request
 
 User = get_user_model()
 
 
-def _current_avatar_path(username: str) -> str | None:
-    try:
-        user = User.objects.select_related("profile").get(username=username)
-        image = getattr(user.profile, "image", None)
-        return image.name if image and image.name else None
-    except (User.DoesNotExist, AttributeError, ObjectDoesNotExist):
-        return None
-
-
-def _build_profile_pic_url(request, profile_pic, username: str | None = None):
+def _build_profile_pic_url(request, profile_pic):
     if not profile_pic:
         return None
+
     try:
-        url = profile_pic.url
+        raw_value = profile_pic.url
     except (AttributeError, ValueError):
-        url = str(profile_pic)
+        raw_value = str(profile_pic)
 
-    # Avoid double-prefixing if already absolute
-    if url.startswith("http://") or url.startswith("https://"):
-        return url
-
-    media_prefix = settings.MEDIA_URL or "/media/"
-    path = url
-    if media_prefix and path.startswith(media_prefix):
-        path = path[len(media_prefix):]
-    path = path.lstrip("/")
-
-    # Если файл отсутствует, попробуем взять актуальный путь из профиля
-    if not default_storage.exists(path) and username:
-        fresh_path = _current_avatar_path(username)
-        if fresh_path and default_storage.exists(fresh_path):
-            path = fresh_path
-
-    # Если и сейчас нет, отдаем дефолт
-    if not default_storage.exists(path):
-        if default_storage.exists("default.jpg"):
-            path = "default.jpg"
-        else:
-            return None
-
-    absolute = f"{media_prefix.rstrip('/')}/{path}"
-    try:
-        return request.build_absolute_uri(absolute)
-    except ValueError:
-        return absolute
+    return build_profile_url_from_request(request, raw_value)
 
 
 def _public_room():
-    """
-    Ensure the public room exists in the database.
-    """
+    """Ensure the public room exists in the database."""
     try:
         room, _created = Room.objects.get_or_create(
             slug=PUBLIC_ROOM_SLUG,
@@ -72,15 +34,25 @@ def _public_room():
         )
         return room
     except (OperationalError, ProgrammingError, IntegrityError):
-        # База может быть не готова (миграции не прогнаны) — вернем заглушку,
-        # чтобы не ронять весь API.
-        stub = Room(slug=PUBLIC_ROOM_SLUG, name=PUBLIC_ROOM_NAME)
-        return stub
+        return Room(slug=PUBLIC_ROOM_SLUG, name=PUBLIC_ROOM_NAME)
 
 
 def _is_valid_room_slug(slug: str) -> bool:
     pattern = getattr(settings, "CHAT_ROOM_SLUG_REGEX", r"^[A-Za-z0-9_-]{3,50}$")
-    return bool(re.match(pattern, slug or ""))
+    try:
+        return bool(re.match(pattern, slug or ""))
+    except re.error:
+        return False
+
+
+def _parse_positive_int(raw_value: str | None, param_name: str) -> int:
+    try:
+        parsed = int(raw_value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid '{param_name}': must be an integer")
+    if parsed < 1:
+        raise ValueError(f"Invalid '{param_name}': must be >= 1")
+    return parsed
 
 
 @require_http_methods(["GET"])
@@ -95,7 +67,7 @@ def room_details(request, room_slug):
         return JsonResponse({"error": "Invalid room slug"}, status=400)
 
     if not request.user.is_authenticated and room_slug != PUBLIC_ROOM_SLUG:
-        return JsonResponse({"error": "Требуется авторизация"}, status=401)
+        return JsonResponse({"error": "РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ"}, status=401)
 
     try:
         if room_slug == PUBLIC_ROOM_SLUG:
@@ -126,8 +98,6 @@ def room_details(request, room_slug):
             }
         )
     except (OperationalError, ProgrammingError, IntegrityError):
-        # Если таблицы нет или миграции не применены, вернем минимальные данные,
-        # чтобы фронт продолжил работать.
         return JsonResponse(
             {
                 "slug": room_slug,
@@ -144,30 +114,51 @@ def room_messages(request, room_slug):
         return JsonResponse({"error": "Invalid room slug"}, status=400)
 
     if not request.user.is_authenticated and room_slug != PUBLIC_ROOM_SLUG:
-        return JsonResponse({"error": "Требуется авторизация"}, status=401)
+        return JsonResponse({"error": "РўСЂРµР±СѓРµС‚СЃСЏ Р°РІС‚РѕСЂРёР·Р°С†РёСЏ"}, status=401)
+
     try:
+        default_page_size = max(1, int(getattr(settings, "CHAT_MESSAGES_PAGE_SIZE", 50)))
+        max_page_size = max(
+            default_page_size,
+            int(getattr(settings, "CHAT_MESSAGES_MAX_PAGE_SIZE", 200)),
+        )
+
         limit_raw = request.GET.get("limit")
         before_raw = request.GET.get("before")
-        try:
-            limit = int(limit_raw) if limit_raw else 50
-        except ValueError:
-            limit = 50
-        limit = max(1, min(limit, 200))
+
+        if limit_raw is None:
+            limit = default_page_size
+        else:
+            try:
+                limit = _parse_positive_int(limit_raw, "limit")
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
+        limit = min(limit, max_page_size)
+
+        before_id = None
+        if before_raw is not None:
+            try:
+                before_id = _parse_positive_int(before_raw, "before")
+            except ValueError as exc:
+                return JsonResponse({"error": str(exc)}, status=400)
 
         messages_qs = Message.objects.filter(room=room_slug).select_related("user", "user__profile")
-        if before_raw:
-            try:
-                before_id = int(before_raw)
-                messages_qs = messages_qs.filter(id__lt=before_id)
-            except ValueError:
-                pass
+        if before_id is not None:
+            messages_qs = messages_qs.filter(id__lt=before_id)
 
-        messages = list(messages_qs.order_by("-id")[:limit])
-        messages.reverse()
+        batch = list(messages_qs.order_by("-id")[: limit + 1])
+        has_more = len(batch) > limit
+        if has_more:
+            batch = batch[:limit]
+        batch.reverse()
+
+        next_before = batch[0].id if has_more and batch else None
+
         serialized = []
-        for message in messages:
+        for message in batch:
             user = getattr(message, "user", None)
             username = user.username if user else message.username
+
             profile_source = None
             if user:
                 profile = getattr(user, "profile", None)
@@ -177,11 +168,7 @@ def room_messages(request, room_slug):
             if not profile_source:
                 profile_source = message.profile_pic
 
-            profile_pic = (
-                _build_profile_pic_url(request, profile_source, username=username)
-                if profile_source
-                else None
-            )
+            profile_pic = _build_profile_pic_url(request, profile_source)
 
             serialized.append(
                 {
@@ -192,7 +179,27 @@ def room_messages(request, room_slug):
                     "createdAt": message.date_added.isoformat(),
                 }
             )
-        return JsonResponse({"messages": serialized})
+
+        return JsonResponse(
+            {
+                "messages": serialized,
+                "pagination": {
+                    "limit": limit,
+                    "hasMore": has_more,
+                    "nextBefore": next_before,
+                },
+            }
+        )
     except (OperationalError, ProgrammingError):
-        # Таблица не готова — вернем пустой список, чтобы не отдавать 500.
-        return JsonResponse({"messages": []})
+        return JsonResponse(
+            {
+                "messages": [],
+                "pagination": {
+                    "limit": int(getattr(settings, "CHAT_MESSAGES_PAGE_SIZE", 50)),
+                    "hasMore": False,
+                    "nextBefore": None,
+                },
+            }
+        )
+
+

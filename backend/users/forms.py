@@ -1,6 +1,7 @@
 from django import forms
-from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import User
+from django.utils.html import strip_tags
 
 from .models import Profile
 
@@ -8,7 +9,7 @@ from .models import Profile
 class UserRegisterForm(UserCreationForm):
     class Meta:
         model = User
-        fields = ['username', 'password1', 'password2']
+        fields = ["username", "password1", "password2"]
 
 
 class UserUpdateForm(forms.ModelForm):
@@ -16,8 +17,7 @@ class UserUpdateForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ['username', 'email']
-
+        fields = ["username", "email"]
 
     def clean_username(self):
         username = self.cleaned_data.get("username", "").strip()
@@ -30,11 +30,26 @@ class UserUpdateForm(forms.ModelForm):
             raise forms.ValidationError("Имя пользователя уже занято")
         return username
 
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip()
+        if not email:
+            return ""
+        qs = User.objects.filter(email__iexact=email)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("Email уже используется")
+        return email
+
 
 class ProfileUpdateForm(forms.ModelForm):
     class Meta:
         model = Profile
-        fields = ['image', 'bio']
+        fields = ["image", "bio"]
         widgets = {
-            'bio': forms.Textarea(attrs={'rows': 4, 'maxlength': 1000}),
+            "bio": forms.Textarea(attrs={"rows": 4, "maxlength": 1000}),
         }
+
+    def clean_bio(self):
+        bio = self.cleaned_data.get("bio") or ""
+        return strip_tags(bio).strip()

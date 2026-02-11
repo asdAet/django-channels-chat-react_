@@ -8,6 +8,8 @@ from django.http import JsonResponse
 from django.http.request import RawPostDataException
 from django.core.cache import cache
 from django.conf import settings
+from chat_app_django.ip_utils import get_client_ip_from_request
+from chat.utils import build_profile_url_from_request
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -22,10 +24,9 @@ def _serialize_user(request, user):
     profile = getattr(user, "profile", None)
     profile_image = None
     if profile and getattr(profile, "image", None):
-        try:
-            profile_image = request.build_absolute_uri(profile.image.url)
-        except ValueError:
-            profile_image = None
+        image_name = getattr(profile.image, "name", "")
+        if image_name:
+            profile_image = build_profile_url_from_request(request, image_name)
 
     return {
         "username": user.username,
@@ -66,10 +67,7 @@ def _collect_errors(*errors):
 
 
 def _get_client_ip(request) -> str:
-    xff = request.META.get("HTTP_X_FORWARDED_FOR")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.META.get("REMOTE_ADDR", "")
+    return get_client_ip_from_request(request) or ""
 
 
 def _rate_limited(request, action: str) -> bool:
@@ -251,10 +249,9 @@ def public_profile_view(request, username: str):
     profile = getattr(user, "profile", None)
     profile_image = None
     if profile and getattr(profile, "image", None):
-        try:
-            profile_image = request.build_absolute_uri(profile.image.url)
-        except ValueError:
-            profile_image = None
+        image_name = getattr(profile.image, "name", "")
+        if image_name:
+            profile_image = build_profile_url_from_request(request, image_name)
 
     return JsonResponse(
         {
@@ -289,3 +286,5 @@ def profile_view(request):
         return JsonResponse({"user": _serialize_user(request, request.user)})
 
     return JsonResponse({"errors": _collect_errors(u_form.errors, p_form.errors)}, status=400)
+
+

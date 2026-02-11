@@ -1,21 +1,41 @@
 import asyncio
 import hashlib
 import json
+import re
 import time
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.text import slugify
 from django.conf import settings
 from django.core.cache import cache
+from chat_app_django.ip_utils import get_client_ip_from_scope
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 
-from .constants import PUBLIC_ROOM_SLUG
+from .constants import (
+    CHAT_CLOSE_IDLE_CODE,
+    PRESENCE_CACHE_KEY_AUTH,
+    PRESENCE_CACHE_KEY_GUEST,
+    PRESENCE_CACHE_TTL_SECONDS,
+    PRESENCE_CLOSE_IDLE_CODE,
+    PRESENCE_GROUP_AUTH,
+    PRESENCE_GROUP_GUEST,
+    PUBLIC_ROOM_SLUG,
+)
 from .models import Message
 from .utils import build_profile_url
 
 
+def _is_valid_room_slug(value: str) -> bool:
+    pattern = getattr(settings, "CHAT_ROOM_SLUG_REGEX", r"^[A-Za-z0-9_-]{3,50}$")
+    try:
+        return bool(re.match(pattern, value or ""))
+    except re.error:
+        return False
+
+
 class ChatConsumer(AsyncWebsocketConsumer):
+    chat_idle_timeout = int(getattr(settings, "CHAT_WS_IDLE_TIMEOUT", 600))
     """
     A consumer does three things:
     1. Accepts connections.
@@ -29,6 +49,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         """
         user = self.scope['user']
         self.room_name = self.scope['url_route']['kwargs']['room_name']
+
+        if self.room_name != PUBLIC_ROOM_SLUG and not _is_valid_room_slug(self.room_name):
+            await self.close()
+            return
 
         is_public = self.room_name == PUBLIC_ROOM_SLUG
         if not user.is_authenticated and not is_public:
@@ -48,12 +72,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
         await self.accept()
 
+        self._last_activity = time.monotonic()
+        self._idle_task = None
+        if self.chat_idle_timeout > 0:
+            self._idle_task = asyncio.create_task(self._idle_watchdog())
+
     async def disconnect(self, close_code):
         """
         Disconnect from channel
 
         :param close_code: optional
         """
+        idle_task = getattr(self, "_idle_task", None)
+        if idle_task:
+            idle_task.cancel()
+            try:
+                await idle_task
+            except asyncio.CancelledError:
+                pass
+
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
@@ -66,6 +103,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         :param text_data: message
         """
 
+        self._last_activity = time.monotonic()
         try:
             text_data_json = json.loads(text_data)
         except json.JSONDecodeError:
@@ -116,6 +154,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         :param event: Events to pick up
         """
+        self._last_activity = time.monotonic()
         message = event['message']
         username = event['username']
         profile_pic = event['profile_pic']
@@ -127,6 +166,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'profile_pic': profile_pic,
             'room': room,
         }))
+
+    async def _idle_watchdog(self):
+        interval = max(10, min(60, self.chat_idle_timeout))
+        while True:
+            await asyncio.sleep(interval)
+            if (time.monotonic() - self._last_activity) <= self.chat_idle_timeout:
+                continue
+            await self.close(code=CHAT_CLOSE_IDLE_CODE)
+            break
 
     @sync_to_async
     def save_message(self, message, user, username, profile_pic, room):
@@ -165,13 +213,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
 
 class PresenceConsumer(AsyncWebsocketConsumer):
-    group_name_auth = "presence_auth"
-    group_name_guest = "presence_guest"
-    cache_key = "presence:online"
-    guest_cache_key = "presence:guests"
+    group_name_auth = PRESENCE_GROUP_AUTH
+    group_name_guest = PRESENCE_GROUP_GUEST
+    cache_key = PRESENCE_CACHE_KEY_AUTH
+    guest_cache_key = PRESENCE_CACHE_KEY_GUEST
     presence_ttl = int(getattr(settings, "PRESENCE_TTL", 90))
     presence_grace = int(getattr(settings, "PRESENCE_GRACE", 5))
     presence_heartbeat = int(getattr(settings, "PRESENCE_HEARTBEAT", 20))
+    presence_idle_timeout = int(getattr(settings, "PRESENCE_IDLE_TIMEOUT", 90))
+    cache_timeout_seconds = PRESENCE_CACHE_TTL_SECONDS
+    presence_touch_interval = int(getattr(settings, "PRESENCE_TOUCH_INTERVAL", 30))
 
     async def connect(self):
         user = self.scope.get("user")
@@ -184,7 +235,12 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
+        self._last_client_activity = time.monotonic()
+        self._next_presence_touch_at = 0.0
         self._heartbeat_task = asyncio.create_task(self._heartbeat())
+        self._idle_task = None
+        if self.presence_idle_timeout > 0:
+            self._idle_task = asyncio.create_task(self._idle_watchdog())
 
         if self.is_guest:
             await self._add_guest(self.guest_ip)
@@ -193,10 +249,13 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         await self._broadcast()
 
     async def disconnect(self, close_code):
-        if getattr(self, "_heartbeat_task", None):
-            self._heartbeat_task.cancel()
+        for task_name in ("_heartbeat_task", "_idle_task"):
+            task = getattr(self, task_name, None)
+            if not task:
+                continue
+            task.cancel()
             try:
-                await self._heartbeat_task
+                await task
             except asyncio.CancelledError:
                 pass
 
@@ -213,6 +272,8 @@ class PresenceConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         if not text_data:
             return
+        now = time.monotonic()
+        self._last_client_activity = now
         try:
             payload = json.loads(text_data)
         except json.JSONDecodeError:
@@ -220,13 +281,15 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         if payload.get("type") != "ping":
             return
 
+        if now < self._next_presence_touch_at:
+            return
+        self._next_presence_touch_at = now + self.presence_touch_interval
+
         user = self.scope.get("user")
         if self.is_guest:
             await self._touch_guest(self.guest_ip)
         elif user and user.is_authenticated:
             await self._touch_user(user)
-
-        await self._broadcast()
 
     async def _broadcast(self):
         online = await self._get_online()
@@ -257,12 +320,15 @@ class PresenceConsumer(AsyncWebsocketConsumer):
                 await self.send(text_data=json.dumps({"type": "ping"}))
             except Exception:
                 break
-            if self.is_guest:
-                await self._touch_guest(self.guest_ip)
-            else:
-                user = self.scope.get("user")
-                if user and user.is_authenticated:
-                    await self._touch_user(user)
+
+    async def _idle_watchdog(self):
+        interval = max(5, min(self.presence_heartbeat, self.presence_idle_timeout))
+        while True:
+            await asyncio.sleep(interval)
+            if (time.monotonic() - self._last_client_activity) <= self.presence_idle_timeout:
+                continue
+            await self.close(code=PRESENCE_CLOSE_IDLE_CODE)
+            break
 
     @sync_to_async
     def _add_user(self, user):
@@ -278,7 +344,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
             "last_seen": time.time(),
             "grace_until": 0,
         }
-        cache.set(self.cache_key, data, timeout=60 * 60)
+        cache.set(self.cache_key, data, timeout=self.cache_timeout_seconds)
 
     @sync_to_async
     def _remove_user(self, user, graceful: bool = False):
@@ -300,7 +366,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
                 entry["last_seen"] = now
                 entry["grace_until"] = 0
                 data[user.username] = entry
-            cache.set(self.cache_key, data, timeout=60 * 60)
+            cache.set(self.cache_key, data, timeout=self.cache_timeout_seconds)
 
     @sync_to_async
     def _get_online(self):
@@ -324,7 +390,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
             ):
                 cleaned[username] = info
         if cleaned != data:
-            cache.set(self.cache_key, cleaned, timeout=60 * 60)
+            cache.set(self.cache_key, cleaned, timeout=self.cache_timeout_seconds)
         return [
             {"username": username, "profileImage": info.get("profileImage")}
             for username, info in cleaned.items()
@@ -341,7 +407,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         except (TypeError, ValueError, AttributeError):
             count = 0
         data[ip] = {"count": count + 1, "last_seen": time.time(), "grace_until": 0}
-        cache.set(self.guest_cache_key, data, timeout=60 * 60)
+        cache.set(self.guest_cache_key, data, timeout=self.cache_timeout_seconds)
 
     @sync_to_async
     def _remove_guest(self, ip: str | None, graceful: bool = False):
@@ -363,7 +429,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
         else:
             data[ip] = {"count": count, "last_seen": now, "grace_until": 0}
         if data:
-            cache.set(self.guest_cache_key, data, timeout=60 * 60)
+            cache.set(self.guest_cache_key, data, timeout=self.cache_timeout_seconds)
         else:
             cache.delete(self.guest_cache_key)
 
@@ -389,7 +455,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
             ):
                 cleaned[ip] = info
         if cleaned != data:
-            cache.set(self.guest_cache_key, cleaned, timeout=60 * 60)
+            cache.set(self.guest_cache_key, cleaned, timeout=self.cache_timeout_seconds)
         return len(cleaned)
 
     @sync_to_async
@@ -412,7 +478,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
             if image_url:
                 current["profileImage"] = image_url
             data[user.username] = current
-        cache.set(self.cache_key, data, timeout=60 * 60)
+        cache.set(self.cache_key, data, timeout=self.cache_timeout_seconds)
 
     @sync_to_async
     def _touch_guest(self, ip: str | None):
@@ -428,7 +494,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
                 "last_seen": time.time(),
                 "grace_until": 0,
             }
-        cache.set(self.guest_cache_key, data, timeout=60 * 60)
+        cache.set(self.guest_cache_key, data, timeout=self.cache_timeout_seconds)
 
     def _decode_header(self, value: bytes | None) -> str | None:
         if not value:
@@ -439,28 +505,7 @@ class PresenceConsumer(AsyncWebsocketConsumer):
             return value.decode("latin-1", errors="ignore")
 
     def _get_client_ip(self) -> str | None:
-        headers = self.scope.get("headers", [])
-        ip = None
-        header_priority = (
-            b"cf-connecting-ip",
-            b"x-real-ip",
-            b"x-forwarded-for",
-        )
-        for name in header_priority:
-            for header, value in headers:
-                if header == name:
-                    ip = self._decode_header(value)
-                    break
-            if ip:
-                break
+        return get_client_ip_from_scope(self.scope)
 
-        if ip and "," in ip:
-            ip = ip.split(",")[0].strip()
-        if ip:
-            return ip
 
-        client = self.scope.get("client")
-        if client and isinstance(client, (list, tuple)) and client:
-            return str(client[0])
-        return None
 

@@ -10,6 +10,15 @@ export type UpdateProfileInput = {
   bio?: string
 }
 
+export type RoomMessagesResponse = {
+  messages: Message[]
+  pagination?: {
+    limit: number
+    hasMore: boolean
+    nextBefore: number | null
+  }
+}
+
 export interface IApiService {
   ensureCsrf(): Promise<{ csrfToken: string }>
   getSession(): Promise<SessionResponse>
@@ -23,7 +32,6 @@ export interface IApiService {
   getRoomMessages(
     slug: string,
     params?: { limit?: number; beforeId?: number },
-  ): Promise<{ messages: Message[] }>
+  ): Promise<RoomMessagesResponse>
   getUserProfile(username: string): Promise<{ user: UserProfile }>
 }
-
