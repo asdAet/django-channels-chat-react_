@@ -19,6 +19,18 @@ class UserUpdateForm(forms.ModelForm):
         fields = ['username', 'email']
 
 
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "").strip()
+        if not username:
+            return username
+        qs = User.objects.filter(username=username)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("Имя пользователя уже занято")
+        return username
+
+
 class ProfileUpdateForm(forms.ModelForm):
     class Meta:
         model = Profile
