@@ -693,6 +693,45 @@ button:focus {
   .chat-log {
     height: 360px;
   }
+
+  .direct-inbox {
+    padding: 14px;
+  }
+
+  .direct-chat-list {
+    gap: 8px;
+  }
+
+  .direct-chat-item {
+    padding: 12px;
+    gap: 10px;
+    border-radius: 14px;
+  }
+
+  .direct-chat-item__head {
+    gap: 8px;
+  }
+
+  .direct-chat-item__name {
+    font-size: 15px;
+  }
+
+  .direct-chat-item__meta .muted {
+    font-size: 12px;
+  }
+
+  .direct-chat-badge {
+    min-width: 22px;
+    text-align: center;
+  }
+
+  .direct-chat-item__body p {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-clamp: 2;
+  }
 }
 
 .card-header {
