@@ -21,7 +21,7 @@ export function TopBar({ user, onNavigate }: Props) {
           Публичный чат
         </button>
         {user && (
-          <button className="link" onClick={() => onNavigate('/direct')}>
+          <button className="link link-with-badge" onClick={() => onNavigate('/direct')}>
             <span>Личные чаты</span>
             {unreadDialogsCount > 0 && <span className="badge">{unreadDialogsCount}</span>}
           </button>

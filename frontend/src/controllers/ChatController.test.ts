@@ -38,21 +38,15 @@ describe('ChatController', () => {
     apiMocks.getDirectChats.mockReset()
   })
 
-  it('caches public room by ttl', async () => {
+  it('does not cache public room between calls', async () => {
     const room: RoomDetailsDto = { slug: 'public', name: 'Public', kind: 'public', created: false, createdBy: null }
     apiMocks.getPublicRoom.mockResolvedValue(room)
 
     const chatController = await loadController()
 
-    const first = await chatController.getPublicRoom()
-    const second = await chatController.getPublicRoom()
-
-    expect(first).toEqual(room)
-    expect(second).toEqual(room)
-    expect(apiMocks.getPublicRoom).toHaveBeenCalledTimes(1)
-
-    vi.setSystemTime(new Date('2026-01-01T00:02:00.000Z'))
     await chatController.getPublicRoom()
+    await chatController.getPublicRoom()
+
     expect(apiMocks.getPublicRoom).toHaveBeenCalledTimes(2)
   })
 
@@ -77,7 +71,34 @@ describe('ChatController', () => {
     expect(second.slug).toBe('public')
   })
 
-  it('uses room details cache key by slug', async () => {
+  it('deduplicates in-flight room details by slug', async () => {
+    let settle: (value: RoomDetailsDto) => void = () => undefined
+    const pending = new Promise<RoomDetailsDto>((res) => {
+      settle = res
+    })
+    apiMocks.getRoomDetails.mockReturnValue(pending)
+
+    const chatController = await loadController()
+
+    const firstPromise = chatController.getRoomDetails('abc')
+    const secondPromise = chatController.getRoomDetails('abc')
+
+    expect(apiMocks.getRoomDetails).toHaveBeenCalledTimes(1)
+
+    settle({
+      slug: 'abc',
+      name: 'Room',
+      kind: 'private',
+      created: false,
+      createdBy: null,
+    })
+
+    const [first, second] = await Promise.all([firstPromise, secondPromise])
+    expect(first.slug).toBe('abc')
+    expect(second.slug).toBe('abc')
+  })
+
+  it('does not cache room details after request completes', async () => {
     apiMocks.getRoomDetails.mockResolvedValue({
       slug: 'abc',
       name: 'Room',
@@ -90,14 +111,35 @@ describe('ChatController', () => {
 
     await chatController.getRoomDetails('abc')
     await chatController.getRoomDetails('abc')
-    await chatController.getRoomDetails('xyz')
 
     expect(apiMocks.getRoomDetails).toHaveBeenCalledTimes(2)
     expect(apiMocks.getRoomDetails).toHaveBeenNthCalledWith(1, 'abc')
-    expect(apiMocks.getRoomDetails).toHaveBeenNthCalledWith(2, 'xyz')
+    expect(apiMocks.getRoomDetails).toHaveBeenNthCalledWith(2, 'abc')
   })
 
-  it('caches room messages by limit and beforeId params', async () => {
+  it('deduplicates in-flight room messages by params', async () => {
+    let settle: (value: RoomMessagesDto) => void = () => undefined
+    const pending = new Promise<RoomMessagesDto>((res) => {
+      settle = res
+    })
+    apiMocks.getRoomMessages.mockReturnValue(pending)
+
+    const chatController = await loadController()
+
+    const firstPromise = chatController.getRoomMessages('public', { limit: 50 })
+    const secondPromise = chatController.getRoomMessages('public', { limit: 50 })
+
+    expect(apiMocks.getRoomMessages).toHaveBeenCalledTimes(1)
+
+    settle({
+      messages: [],
+      pagination: { limit: 50, hasMore: false, nextBefore: null },
+    })
+
+    await Promise.all([firstPromise, secondPromise])
+  })
+
+  it('does not cache room messages after request completes', async () => {
     apiMocks.getRoomMessages.mockResolvedValue({
       messages: [],
       pagination: { limit: 50, hasMore: false, nextBefore: null },
@@ -107,22 +149,39 @@ describe('ChatController', () => {
 
     await chatController.getRoomMessages('public', { limit: 50 })
     await chatController.getRoomMessages('public', { limit: 50 })
-    await chatController.getRoomMessages('public', { limit: 50, beforeId: 200 })
 
     expect(apiMocks.getRoomMessages).toHaveBeenCalledTimes(2)
-    expect(apiMocks.getRoomMessages).toHaveBeenNthCalledWith(1, 'public', { limit: 50 })
-    expect(apiMocks.getRoomMessages).toHaveBeenNthCalledWith(2, 'public', {
-      limit: 50,
-      beforeId: 200,
-    })
   })
 
-  it('invalidates direct chats cache after start', async () => {
-    apiMocks.startDirectChat.mockResolvedValue({
-      slug: 'dm_123',
-      kind: 'direct',
-      peer: { username: 'alice', profileImage: null },
+  it('deduplicates in-flight direct chats request', async () => {
+    let settle: (value: DirectChatsResponseDto) => void = () => undefined
+    const pending = new Promise<DirectChatsResponseDto>((res) => {
+      settle = res
     })
+    apiMocks.getDirectChats.mockReturnValue(pending)
+
+    const chatController = await loadController()
+
+    const firstPromise = chatController.getDirectChats()
+    const secondPromise = chatController.getDirectChats()
+
+    expect(apiMocks.getDirectChats).toHaveBeenCalledTimes(1)
+
+    settle({
+      items: [
+        {
+          slug: 'dm_123',
+          peer: { username: 'alice', profileImage: null },
+          lastMessage: 'hello',
+          lastMessageAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    })
+
+    await Promise.all([firstPromise, secondPromise])
+  })
+
+  it('does not cache direct chats after request completes', async () => {
     apiMocks.getDirectChats.mockResolvedValue({
       items: [
         {
@@ -137,10 +196,6 @@ describe('ChatController', () => {
     const chatController = await loadController()
 
     await chatController.getDirectChats()
-    await chatController.getDirectChats()
-    expect(apiMocks.getDirectChats).toHaveBeenCalledTimes(1)
-
-    await chatController.startDirectChat('alice')
     await chatController.getDirectChats()
     expect(apiMocks.getDirectChats).toHaveBeenCalledTimes(2)
   })

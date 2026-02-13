@@ -4,6 +4,7 @@ import { authController } from '../controllers/AuthController'
 import type { LoginDto, RegisterDto, UpdateProfileDto, UserProfileDto } from '../dto/auth'
 import { debugLog } from '../shared/lib/debug'
 import type { ApiError } from '../shared/api/types'
+import { clearAllUserCaches, invalidateSelfProfile } from '../shared/cache/cacheManager'
 
 export type AuthState = {
   user: UserProfileDto | null
@@ -48,6 +49,7 @@ export const useAuth = () => {
     await authController.ensureCsrf()
     const session = await authController.login(dto)
     setAuth({ user: session.user, loading: false })
+    clearAllUserCaches()
     return session
   }, [])
 
@@ -55,12 +57,14 @@ export const useAuth = () => {
     await authController.ensureCsrf()
     const session = await authController.register(dto)
     setAuth({ user: session.user, loading: false })
+    clearAllUserCaches()
     return session
   }, [])
 
   const logout = useCallback(async () => {
     await authController.logout().catch(() => {})
     setAuth({ user: null, loading: false })
+    clearAllUserCaches()
   }, [])
 
   const updateProfile = useCallback(async (dto: UpdateProfileDto) => {
@@ -69,6 +73,7 @@ export const useAuth = () => {
       const { user } = await authController.updateProfile(dto)
       const normalizedUser = normalizeProfileImage(user)
       setAuth((prev) => ({ ...prev, user: normalizedUser }))
+      invalidateSelfProfile()
       return { user: normalizedUser }
     } catch (err) {
       const apiErr = err as ApiError

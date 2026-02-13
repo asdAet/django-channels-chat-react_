@@ -7,6 +7,7 @@ import type { UserProfile } from '../../entities/user/types'
 import { useReconnectingWebSocket } from '../../hooks/useReconnectingWebSocket'
 import { debugLog } from '../lib/debug'
 import { getWebSocketBase } from '../lib/ws'
+import { invalidateDirectChats } from '../cache/cacheManager'
 import { DirectInboxContext } from './context'
 
 const DIRECT_INBOX_PING_MS = 15_000
@@ -144,6 +145,7 @@ export function DirectInboxProvider({ user, ready = true, children }: ProviderPr
           if (item) {
             setItems((prev) => mergeItem(prev, item))
           }
+          invalidateDirectChats()
           if (payload.unread) {
             applyUnreadState(payload.unread)
           }

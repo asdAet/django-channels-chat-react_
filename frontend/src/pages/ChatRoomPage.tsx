@@ -15,6 +15,7 @@ import { sanitizeText } from "../shared/lib/sanitize";
 import { getWebSocketBase } from "../shared/lib/ws";
 import { useDirectInbox } from "../shared/directInbox";
 import { usePresence } from "../shared/presence";
+import { invalidateDirectChats, invalidateRoomMessages } from "../shared/cache/cacheManager";
 
 type Props = {
   slug: string;
@@ -92,6 +93,10 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
       const content = sanitizeText(String(data.message), MAX_MESSAGE_LENGTH);
       if (!content) return;
       tempIdRef.current += 1;
+      invalidateRoomMessages(slug);
+      if (details?.kind === "direct") {
+        invalidateDirectChats();
+      }
       setMessages((prev) => [
         ...prev,
         {
