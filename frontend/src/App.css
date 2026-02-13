@@ -360,13 +360,13 @@ button:focus {
 }
 
 .avatar.small {
-  width: 40px;
-  height: 40px;
+  width: 45px;
+  height: 45px;
 }
 
 .avatar.tiny {
-  width: 34px;
-  height: 34px;
+  width: 45px;
+  height: 45px;
 }
 
 .topbar .avatar {
@@ -580,8 +580,19 @@ button:focus {
 /* Mobile tweaks */
 @media (max-width: 881px) {
   .direct-layout {
-    grid-template-columns: 1fr;
+    display: block;
+    max-height: none;
+    overflow: visible;
   }
+
+  .direct-layout {
+  /* display: grid !important; */
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+  align-items: stretch;
+  max-height: calc(100vh - 200px);
+  overflow: hidden;
+}
 
   .direct-layout:not(.direct-layout--chat) .direct-main {
     display: none;
@@ -595,19 +606,37 @@ button:focus {
     width: 100%;
   }
 
+  .direct-sidebar,
+  .direct-main {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    height: auto;
+  }
+
   .direct-sidebar-card {
     height: auto;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
   }
 
   .direct-sidebar-card .direct-chat-list {
     max-height: none;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 14px;
   }
 
-  .direct-sidebar {
-    width: 100%;
-    max-width: 520px;
-    margin: 0 auto;
+  .direct-inbox > .muted {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 14px;
   }
+
   .app-shell {
     padding: 20px 14px 48px;
     max-width: 100%;
@@ -1024,6 +1053,11 @@ button:focus {
   gap: 10px;
 }
 
+.chat-input .btn {
+  width: fit-content;
+  flex: 0 0 auto;
+}
+
 .chat-input input {
   flex: 1;
   padding: 12px;
@@ -1239,4 +1273,55 @@ button:focus {
 .direct-chat-item.is-active {
   border-color: rgba(138, 230, 255, 0.65);
   box-shadow: 0 0 0 1px rgba(138, 230, 255, 0.25);
+}
+
+@media (max-width: 881px) {
+  .direct-layout {
+    display: block;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .direct-layout:not(.direct-layout--chat) .direct-main {
+    display: none;
+  }
+
+  .direct-layout--chat .direct-sidebar {
+    display: none;
+  }
+
+  .direct-layout--chat .direct-main {
+    width: 100%;
+  }
+
+  .direct-sidebar,
+  .direct-main {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    height: auto;
+  }
+
+  .direct-sidebar-card {
+    height: auto;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+
+  .direct-sidebar-card .direct-chat-list {
+    max-height: none;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .direct-inbox > .muted {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 14px;
+  }
 }

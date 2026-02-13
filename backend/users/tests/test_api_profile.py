@@ -81,6 +81,22 @@ class ProfileApiTests(TestCase):
         self.assertIn('errors', payload)
         self.assertIn('username', payload['errors'])
 
+    def test_profile_update_rejects_long_username(self):
+        self.client.force_login(self.user)
+        csrf = self._csrf()
+        response = self.client.post(
+            '/api/auth/profile/',
+            data={
+                'username': 'a' * 14,
+                'email': self.user.email,
+            },
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertIn('errors', payload)
+        self.assertIn('username', payload['errors'])
+
     def test_profile_update_rejects_duplicate_email(self):
         self.client.force_login(self.user)
         csrf = self._csrf()

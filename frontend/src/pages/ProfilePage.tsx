@@ -1,5 +1,9 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { avatarFallback, formatLastSeen, formatRegistrationDate } from "../shared/lib/format";
+import {
+  avatarFallback,
+  formatLastSeen,
+  formatRegistrationDate,
+} from "../shared/lib/format";
 import { usePresence } from "../shared/presence";
 import type { UserProfile } from "../entities/user/types";
 
@@ -20,6 +24,7 @@ type Props = {
 };
 
 export function ProfilePage({ user, onSave, onNavigate, onLogout }: Props) {
+  const USERNAME_MAX_LENGTH = 13;
   const { online: presenceOnline, status: presenceStatus } = usePresence();
   const [form, setForm] = useState({
     username: user?.username || "",
@@ -29,7 +34,10 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout }: Props) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
-  const isUsernameValid = form.username.trim().length > 0;
+  const trimmedUsername = form.username.trim();
+  const isUsernameTooLong = trimmedUsername.length > USERNAME_MAX_LENGTH;
+  const isUsernameValid =
+    trimmedUsername.length > 0 && trimmedUsername.length <= USERNAME_MAX_LENGTH;
   const isBioValid = form.bio.length <= 1000;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,12 +103,16 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout }: Props) {
       <div className="profile_header">
         <p className="eyebrow_profile">Профиль</p>
         <div className="profile_meta">
-          <span>Зарегистрирован: {formatRegistrationDate(user.registeredAt) || "—"}</span>
           {isUserOnline ? (
             <span>В сети</span>
           ) : (
-            <span>Последний раз в сети: {formatLastSeen(user.lastSeen) || "—"}</span>
+            <span>
+              Последний раз в сети: {formatLastSeen(user.lastSeen) || "—"}
+            </span>
           )}
+          <span>
+            Зарегистрирован: {formatRegistrationDate(user.registeredAt) || "—"}
+          </span>
         </div>
       </div>
 
@@ -178,12 +190,18 @@ export function ProfilePage({ user, onSave, onNavigate, onLogout }: Props) {
           <input
             type="text"
             value={form.username}
+            maxLength={USERNAME_MAX_LENGTH}
             onChange={(e) => {
               setForm({ ...form, username: e.target.value });
               setFormError(null);
               clearFieldError("username");
             }}
           />
+          {isUsernameTooLong && (
+            <span className="note warning">
+              Максимум {USERNAME_MAX_LENGTH} символов.
+            </span>
+          )}
           {usernameError && <span className="note error">{usernameError}</span>}
         </label>
         <label className={`field ${emailError ? "error" : ""}`}>

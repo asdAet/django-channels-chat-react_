@@ -64,6 +64,25 @@ class AuthApiTests(TestCase):
         self.assertIn('errors', payload)
         self.assertIn('username', payload['errors'])
 
+    def test_register_rejects_long_username(self):
+        csrf = self._csrf()
+        response = self.client.post(
+            '/api/auth/register/',
+            data=json.dumps(
+                {
+                    'username': 'a' * 14,
+                    'password1': 'pass12345',
+                    'password2': 'pass12345',
+                }
+            ),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertIn('errors', payload)
+        self.assertIn('username', payload['errors'])
+
     @override_settings(
         AUTH_PASSWORD_VALIDATORS=[
             {

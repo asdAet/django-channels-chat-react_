@@ -363,11 +363,11 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
                 Загружаем ранние сообщения...
               </div>
             )}
-            {/* {!hasMore && (
+            {!hasMore && (
               <div className="panel muted" aria-live="polite">
                 Это начало истории.
               </div>
-            )} */}
+            )}
             {timeline.map((item) =>
               item.type === "day" ? (
                 <div

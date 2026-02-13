@@ -20,6 +20,7 @@ export function AuthPage({
   error = null,
   passwordRules = [],
 }: Props) {
+  const USERNAME_MAX_LENGTH = 13
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -47,6 +48,7 @@ export function AuthPage({
               type="text"
               autoComplete="username"
               value={username}
+              maxLength={USERNAME_MAX_LENGTH}
               onChange={(e) => setUsername(e.target.value)}
             />
           </label>

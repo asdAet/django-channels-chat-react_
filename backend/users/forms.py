@@ -6,10 +6,23 @@ from django.utils.html import strip_tags
 from .models import Profile
 
 
+USERNAME_MAX_LENGTH = 13
+
+
 class UserRegisterForm(UserCreationForm):
     class Meta:
         model = User
         fields = ["username", "password1", "password2"]
+
+    def clean_username(self):
+        username = super().clean_username().strip()
+        if not username:
+            return username
+        if len(username) > USERNAME_MAX_LENGTH:
+            raise forms.ValidationError(
+                f"Максимум {USERNAME_MAX_LENGTH} символов."
+            )
+        return username
 
 
 class UserUpdateForm(forms.ModelForm):
@@ -23,6 +36,10 @@ class UserUpdateForm(forms.ModelForm):
         username = self.cleaned_data.get("username", "").strip()
         if not username:
             return username
+        if len(username) > USERNAME_MAX_LENGTH:
+            raise forms.ValidationError(
+                f"Максимум {USERNAME_MAX_LENGTH} символов."
+            )
         qs = User.objects.filter(username=username)
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)

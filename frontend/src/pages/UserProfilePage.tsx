@@ -7,7 +7,11 @@
   type WheelEvent as ReactWheelEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { avatarFallback, formatLastSeen, formatRegistrationDate } from "../shared/lib/format";
+import {
+  avatarFallback,
+  formatLastSeen,
+  formatRegistrationDate,
+} from "../shared/lib/format";
 import type { UserProfile } from "../entities/user/types";
 import { useUserProfile } from "../hooks/useUserProfile";
 import { usePresence } from "../shared/presence";
@@ -318,9 +322,7 @@ export function UserProfilePage({
           <h2>{user.username}</h2>
           <p className="muted">О себе</p>
           <p className="bio-text">{user.bio || "Пока ничего не указано."}</p>
-          <p className="profile_meta profile_meta_right">
-            Зарегистрирован: {formatRegistrationDate(user.registeredAt) || "—"}
-          </p>
+
           {isUserOnline ? (
             <p className="profile_meta profile_meta_right">В сети</p>
           ) : (
@@ -328,6 +330,9 @@ export function UserProfilePage({
               Последний раз в сети: {formatLastSeen(user.lastSeen) || "—"}
             </p>
           )}
+          <p className="profile_meta profile_meta_right">
+            Зарегистрирован: {formatRegistrationDate(user.registeredAt) || "—"}
+          </p>
         </div>
         <div className="actions">
           {isSelf && (
@@ -341,7 +346,9 @@ export function UserProfilePage({
           {!isSelf && currentUser && (
             <button
               className="btn primary"
-              onClick={() => onNavigate(`/direct/@${encodeURIComponent(user.username)}`)}
+              onClick={() =>
+                onNavigate(`/direct/@${encodeURIComponent(user.username)}`)
+              }
             >
               Отправить сообщение
             </button>
