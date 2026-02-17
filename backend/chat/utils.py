@@ -164,7 +164,7 @@ def _pick_base_url(
     return forwarded_base or host_base
 
 
-def _coerce_media_source(image_name: str | None) -> str | None:
+def _coerce_media_source(image_name: str | None, trusted_hosts: set[str] | None = None) -> str | None:
     """Преобразует входное имя/URL медиа к безопасному источнику."""
     if not image_name:
         return None
@@ -178,7 +178,9 @@ def _coerce_media_source(image_name: str | None) -> str | None:
 
     parsed = urlparse(raw)
     media_candidate = normalize_media_path(parsed.path)
-    if media_candidate and _is_internal_host(parsed.hostname):
+    hostname = (parsed.hostname or "").strip().lower()
+    trusted = {host.strip().lower() for host in (trusted_hosts or set()) if host}
+    if media_candidate and (_is_internal_host(hostname) or hostname in trusted):
         return media_candidate
 
     return raw
@@ -221,17 +223,6 @@ def _signed_media_url_path(image_name: str | None, expires_at: int | None = None
 
 def build_profile_url_from_request(request, image_name: str | None) -> str | None:
     """Формирует абсолютный URL аватара с учетом HTTP-заголовков запроса."""
-    source = _coerce_media_source(image_name)
-    if not source:
-        return None
-
-    if source.startswith("http://") or source.startswith("https://"):
-        return source
-
-    path = _signed_media_url_path(source)
-    if not path:
-        return None
-
     configured_base = _normalize_base_url(getattr(settings, "PUBLIC_BASE_URL", None))
     origin_base = _normalize_base_url(_first_value(request.META.get("HTTP_ORIGIN")))
     forwarded_base = _base_from_host_and_scheme(
@@ -248,16 +239,13 @@ def build_profile_url_from_request(request, image_name: str | None) -> str | Non
         scheme = "https" if request.is_secure() else "http"
         host_base = f"{scheme}://{host}"
 
-    base = _pick_base_url(configured_base, forwarded_base, host_base, origin_base)
-    if base:
-        return f"{base}{path}"
-
-    return path
-
-
-def build_profile_url(scope, image_name: str | None) -> str | None:
-    """Формирует абсолютный URL аватара для WebSocket ASGI scope."""
-    source = _coerce_media_source(image_name)
+    trusted_hosts = {
+        _hostname_from_base(configured_base),
+        _hostname_from_base(origin_base),
+        _hostname_from_base(forwarded_base),
+        _hostname_from_base(host_base),
+    }
+    source = _coerce_media_source(image_name, trusted_hosts={h for h in trusted_hosts if h})
     if not source:
         return None
 
@@ -268,6 +256,15 @@ def build_profile_url(scope, image_name: str | None) -> str | None:
     if not path:
         return None
 
+    base = _pick_base_url(configured_base, forwarded_base, host_base, origin_base)
+    if base:
+        return f"{base}{path}"
+
+    return path
+
+
+def build_profile_url(scope, image_name: str | None) -> str | None:
+    """Формирует абсолютный URL аватара для WebSocket ASGI scope."""
     configured_base = _normalize_base_url(getattr(settings, "PUBLIC_BASE_URL", None))
     origin_base = _normalize_base_url(_first_value(_get_header(scope, b"origin")))
     forwarded_base = _base_from_host_and_scheme(
@@ -278,6 +275,22 @@ def build_profile_url(scope, image_name: str | None) -> str | None:
         _get_header(scope, b"host"),
         "https" if scope.get("scheme") in {"wss", "https"} else "http",
     )
+    trusted_hosts = {
+        _hostname_from_base(configured_base),
+        _hostname_from_base(origin_base),
+        _hostname_from_base(forwarded_base),
+        _hostname_from_base(host_base),
+    }
+    source = _coerce_media_source(image_name, trusted_hosts={h for h in trusted_hosts if h})
+    if not source:
+        return None
+
+    if source.startswith("http://") or source.startswith("https://"):
+        return source
+
+    path = _signed_media_url_path(source)
+    if not path:
+        return None
 
     base = _pick_base_url(configured_base, forwarded_base, host_base, origin_base)
     if base:

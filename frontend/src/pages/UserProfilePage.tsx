@@ -38,13 +38,15 @@ export function UserProfilePage({
 }: Props) {
   const { user, loading, error } = useUserProfile(username);
   const { online: presenceOnline, status: presenceStatus } = usePresence();
+  const isSelfRoute = currentUser?.username === username;
+  const profileUser = isSelfRoute ? currentUser : user;
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const contentRef = useRef<HTMLDivElement | null>(null);
 
-  const hasProfileImage = Boolean(user?.profileImage);
+  const hasProfileImage = Boolean(profileUser?.profileImage);
   const pinchState = useRef<{ distance: number; zoom: number } | null>(null);
   const dragState = useRef<{
     x: number;
@@ -317,7 +319,7 @@ export function UserProfilePage({
     };
   }, [isPreviewOpen]);
 
-  if (loading) {
+  if (loading && !profileUser) {
     return (
       <div className="panel muted" aria-busy="true">
         Загрузка профиля...
@@ -325,7 +327,7 @@ export function UserProfilePage({
     );
   }
 
-  if (error || !user) {
+  if (error || !profileUser) {
     return (
       <div className="panel">
         <p>Профиль не найден.</p>
@@ -338,10 +340,10 @@ export function UserProfilePage({
     );
   }
 
-  const isSelf = currentUser?.username === user.username;
+  const isSelf = currentUser?.username === profileUser.username;
   const isUserOnline =
     presenceStatus === "online" &&
-    presenceOnline.some((entry) => entry.username === user.username);
+    presenceOnline.some((entry) => entry.username === profileUser.username);
 
   return (
     <div className="card wide">
@@ -358,20 +360,20 @@ export function UserProfilePage({
           onClick={openPreview}
           onKeyDown={handleAvatarKeyDown}
         >
-          {user.profileImage ? (
-            <img src={user.profileImage} alt={user.username} />
+          {profileUser.profileImage ? (
+            <img src={profileUser.profileImage!} alt={profileUser.username} />
           ) : (
-            <span>{avatarFallback(user.username)}</span>
+            <span>{avatarFallback(profileUser.username)}</span>
           )}
         </div>
       </div>
 
-      {isPreviewOpen && user.profileImage && (
+      {isPreviewOpen && profileUser.profileImage && (
         <div
           className="avatar-lightbox"
           role="dialog"
           aria-modal="true"
-          aria-label={`Аватар ${user.username}`}
+          aria-label={`Аватар ${profileUser.username}`}
           onClick={closePreview}
         >
           <div
@@ -393,8 +395,8 @@ export function UserProfilePage({
           >
             <img
               className="avatar-lightbox__image"
-              src={user.profileImage}
-              alt={`Аватар ${user.username}`}
+              src={profileUser.profileImage}
+              alt={`Аватар ${profileUser.username}`}
               draggable={false}
             />
           </div>
@@ -403,19 +405,19 @@ export function UserProfilePage({
 
       <div className="stack">
         <div>
-          <h2>{user.username}</h2>
+          <h2>{profileUser.username}</h2>
           <p className="muted">О себе</p>
-          <p className="bio-text">{user.bio || "Пока ничего не указано."}</p>
+          <p className="bio-text">{profileUser.bio || "Пока ничего не указано."}</p>
 
           {isUserOnline ? (
             <p className="profile_meta profile_meta_right">В сети</p>
           ) : (
             <p className="profile_meta profile_meta_right">
-              Последний раз в сети: {formatLastSeen(user.lastSeen) || "—"}
+              Последний раз в сети: {formatLastSeen(profileUser.lastSeen) || "—"}
             </p>
           )}
           <p className="profile_meta profile_meta_right">
-            Зарегистрирован: {formatRegistrationDate(user.registeredAt) || "—"}
+            Зарегистрирован: {formatRegistrationDate(profileUser.registeredAt) || "—"}
           </p>
         </div>
         <div className="actions">
@@ -436,7 +438,7 @@ export function UserProfilePage({
                  * @returns Результат выполнения `onNavigate`.
                  */
 
-                onNavigate(`/direct/@${encodeURIComponent(user.username)}`)
+                onNavigate(`/direct/@${encodeURIComponent(profileUser.username)}`)
               }
             >
               Отправить сообщение

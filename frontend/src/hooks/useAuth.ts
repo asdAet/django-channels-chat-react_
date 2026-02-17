@@ -4,7 +4,7 @@ import { authController } from '../controllers/AuthController'
 import type { LoginDto, RegisterDto, UpdateProfileDto, UserProfileDto } from '../dto/auth'
 import { debugLog } from '../shared/lib/debug'
 import type { ApiError } from '../shared/api/types'
-import { clearAllUserCaches, invalidateSelfProfile } from '../shared/cache/cacheManager'
+import { clearAllUserCaches, invalidateSelfProfile, invalidateUserProfile } from '../shared/cache/cacheManager'
 
 export type AuthState = {
   user: UserProfileDto | null
@@ -140,6 +140,7 @@ export const useAuth = () => {
     try {
       const { user } = await authController.updateProfile(dto)
       const normalizedUser = normalizeProfileImage(user)
+      const previousUsername = auth.user?.username ?? null
       /**
        * Выполняет метод `setAuth`.
        * @returns Результат выполнения `setAuth`.
@@ -152,6 +153,8 @@ export const useAuth = () => {
        */
 
       invalidateSelfProfile()
+      const usernamesToInvalidate = new Set([previousUsername, normalizedUser.username].filter(Boolean) as string[])
+      usernamesToInvalidate.forEach((username) => invalidateUserProfile(username))
       return { user: normalizedUser }
     } catch (err) {
       const apiErr = err as ApiError
@@ -166,7 +169,7 @@ export const useAuth = () => {
       }
       throw err
     }
-  }, [])
+  }, [auth.user])
 
   return {
     auth,

@@ -277,6 +277,24 @@ class BuildProfileUrlFromRequestTests(_SignedUrlAssertionsMixin, SimpleTestCase)
         )
         self.assert_signed_media_url(url, "https://slowed.sbs")
 
+    @override_settings(
+        MEDIA_URL="/media/",
+        PUBLIC_BASE_URL="https://slowed.sbs",
+        ALLOWED_HOSTS=["*"],
+        MEDIA_SIGNING_KEY="test-key",
+    )
+    def test_request_rewrites_public_absolute_media_url(self):
+        """Проверяет сценарий `test_request_rewrites_public_absolute_media_url`."""
+        request = self.factory.get(
+            "/api/auth/session/",
+            HTTP_HOST="slowed.sbs",
+        )
+        url = build_profile_url_from_request(
+            request,
+            "https://slowed.sbs/media/profile_pics/a.jpg",
+        )
+        self.assert_signed_media_url(url, "https://slowed.sbs")
+
     @override_settings(MEDIA_URL="/media/", ALLOWED_HOSTS=["*"], MEDIA_SIGNING_KEY="test-key")
     def test_request_returns_relative_path_when_host_is_unavailable(self):
         """Проверяет сценарий `test_request_returns_relative_path_when_host_is_unavailable`."""
