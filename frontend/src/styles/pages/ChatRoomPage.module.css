@@ -178,8 +178,12 @@
 }
 
 .chatInput {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
   display: flex;
   gap: 10px;
+  padding: 20px;
 }
 
 .chatInput input {
@@ -244,5 +248,8 @@
   .chatLog {
     height: 360px;
   }
-}
 
+  /* .chatInput {
+    bottom: env(safe-area-inset-bottom, 0);
+  } */
+}

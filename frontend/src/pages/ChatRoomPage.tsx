@@ -246,29 +246,29 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
   const loadError = error ? 'Не удалось загрузить комнату' : null
   const visibleError = roomError || loadError
 
-  const statusLabel = (() => {
-    switch (status) {
-      case 'online':
-        return 'Подключено'
-      case 'connecting':
-        return 'Подключаемся...'
-      case 'offline':
-        return 'Офлайн'
-      case 'error':
-        return 'Ошибка соединения'
-      case 'closed':
-        return 'Соединение потеряно'
-      default:
-        return 'Соединение...'
-    }
-  })()
+  // const statusLabel = (() => {
+  //   switch (status) {
+  //     case 'online':
+  //       return 'Подключено'
+  //     case 'connecting':
+  //       return 'Подключаемся...'
+  //     case 'offline':
+  //       return 'Офлайн'
+  //     case 'error':
+  //       return 'Ошибка соединения'
+  //     case 'closed':
+  //       return 'Соединение потеряно'
+  //     default:
+  //       return 'Соединение...'
+  //   }
+  // })()
 
-  const statusClass =
-    status === 'online'
-      ? styles.pillSuccess
-      : status === 'connecting'
-        ? styles.pillWarning
-        : styles.pillMuted
+  // const statusClass =
+  //   status === 'online'
+  //     ? styles.pillSuccess
+  //     : status === 'connecting'
+  //       ? styles.pillWarning
+  //       : styles.pillMuted
 
   const timeline = useMemo(() => {
     const items: Array<
@@ -329,8 +329,7 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
 
       <div className={styles.chatHeader}>
         <div>
-          <p className={styles.eyebrow}>Комната</p>
-          <h2>{(details?.kind === 'direct' && details?.peer?.username) || details?.createdBy || details?.name || slug}</h2>
+          {/* <h2>{(details?.kind === 'direct' && details?.peer?.username) || details?.createdBy || details?.name || slug}</h2> */}
           {details?.kind === 'direct' && (
             <p className={styles.muted}>
               {details?.peer?.username && onlineUsernames.has(details.peer.username)
@@ -342,12 +341,12 @@ export function ChatRoomPage({ slug, user, onNavigate }: Props) {
             <p className={styles.muted}>Создатель: {details.createdBy}</p>
           )}
         </div>
-        <span className={[styles.pill, statusClass].join(' ')} aria-live="polite">
+        {/* <span className={[styles.pill, statusClass].join(' ')} aria-live="polite">
           <span className={styles.statusPill}>
             {status === 'connecting' && <span className={styles.spinner} aria-hidden="true" />}
             {statusLabel}
           </span>
-        </span>
+        </span> */}
       </div>
 
       {visibleError && <Toast variant="danger">{visibleError}</Toast>}

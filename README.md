@@ -117,3 +117,4 @@ docker compose -f docker-compose.prod.yml up -d --build
 - `CHAT_DIRECT_SLUG_SALT` (если пусто, используется `DJANGO_SECRET_KEY`)
 - `WS_CONNECT_RATE_LIMIT=60`
 - `WS_CONNECT_RATE_WINDOW=60`
+
