@@ -281,11 +281,11 @@ EchoRoom/
 
 ## 7. Backend Details
 ### Настройки и конфигурация
-`backend/chat_app_django/settings.py` предоставляет конфигурацию, управляемую env:
-- настройки безопасности по умолчанию для производства;
-- Настройка БД/Redis/каналов;
-- чат/присутствие/прямые лимиты;
-- настройки медиаподписи.
+`backend/chat_app_django/settings.py` задает env-driven конфигурацию:
+- security defaults для production;
+- настройка DB/Redis/Channels;
+- лимиты chat/presence/direct;
+- параметры media signing.
 
 ### Состав URL-адреса
 - Корневые URL-адреса: `backend/chat_app_django/urls.py`
@@ -296,11 +296,27 @@ EchoRoom/
 ### Конечная точка политики времени выполнения
 - `GET /api/meta/client-config/`
 - возвращает ограничения и политики времени выполнения интерфейса:
-  - `имя_пользователяMaxLength`
+  - `usernameMaxLength`
   - `chatMessageMaxLength`
   - `chatRoomSlugRegex`
   - `mediaUrlTtlSeconds`
-  - `медиарежим`
+  - `mediaMode`
+
+### Модель ролей доступа (ChatRole)
+Источник: `backend/chat/models.py` и `backend/chat/access.py`.
+
+| Роль | Чтение комнаты | Отправка сообщений |
+|---|---|---|
+| `owner` | Да | Да |
+| `admin` | Да | Да |
+| `member` | Да | Да |
+| `viewer` | Да | Нет |
+| `blocked` | Нет | Нет |
+
+Правила применения:
+- `public`: читать могут все, писать только авторизованные пользователи.
+- `private`: доступ определяется ролью в `ChatRole`.
+- `direct`: кроме роли, пользователь должен входить в пару `direct_pair_key`.
 
 ### Модули безопасности
 - `security/rate_limit.py`: ограничитель на базе БД с fail-closed поведением.
@@ -417,8 +433,9 @@ EchoRoom/
 Важные настройки по умолчанию в производстве:
 - `DJANGO_DEBUG=0`
 - `DJANGO_RELAX_PASSWORDS=0`
-- включены безопасные файлы cookie
-- носители служили только для подписания
+- включены secure cookie для HTTPS.
+- media работает в режиме signed_only.
+- если Cloudflare не используется, оставляйте `DJANGO_TRUSTED_PROXY_RANGES` только для ваших реальных прокси/внутренних сетей.
 
 ## 12. Local Development
 ### Серверная часть (PowerShell)
@@ -458,18 +475,18 @@ npm run dev
 ```
 
 ## 13. Production Deployment
-### Написать
+### Docker Compose
 ```bash
 docker compose -f docker-compose.prod.yml up --build
 ```
 
-### Нгинкс
-- `/api/` и `/ws/` прокси для серверной части.
+### Nginx
+- `/api/` и `/ws/` проксируются в backend.
 - `/static/` обслуживается из статического тома.
 - `/media/` заблокирован в производстве.
 - `/_protected_media/` является только внутренним.
 
-### ТЛС
+### TLS
 Nginx ожидает сертификаты в:
 - `deploy/certs/fullchain.pem`
 - `deploy/certs/privkey.pem`
