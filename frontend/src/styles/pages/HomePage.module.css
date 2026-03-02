@@ -4,14 +4,36 @@
   gap: 18px;
 }
 
-.hero {
+
+.border 
+{
   display: grid;
-  grid-template-columns: 2fr 1fr;
   gap: 24px;
   padding: 24px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 20px;
+}
+
+.hero {
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+}
+
+.heroRight {
+  display: grid;
+  gap: 24px;
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  
+  /* Просто удаляем justify-items: end */
+  text-align: right;
 }
 
 .heroContent {
@@ -219,6 +241,86 @@
   gap: 12px;
 }
 
+
+
+/* Footer.module.css */
+.footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 48px 24px 24px;
+  background: rgba(255, 255, 255, 0.01);
+  margin-top: 48px;
+}
+
+.footerContent {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.footerColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.footerTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.footerList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footerList li {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.footerList a {
+  color: rgba(255, 255, 255, 0.6);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.footerList a:hover {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.footerBottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 48px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.footerBottom p {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 0;
+}
+
+.footerTech {
+  font-family: monospace;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+
 @media (max-width: 881px) {
   .hero {
     grid-template-columns: 1fr;
@@ -253,6 +355,17 @@
   .actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+    .footerContent {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .footerBottom {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
   }
 }
 

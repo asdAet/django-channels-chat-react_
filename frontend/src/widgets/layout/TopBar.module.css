@@ -1,19 +1,16 @@
 .root {
   position: sticky;
-  top: 0;
-  z-index: 20;
+  /* top: 0; */
+  /* z-index: 20; */
   width: calc(100% + 64px);
-  margin-top: -10px;
   margin-left: -32px;
   margin-right: -32px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0);
 }
 
 .brand {

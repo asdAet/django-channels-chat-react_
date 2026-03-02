@@ -20,7 +20,6 @@ class AuthController {
    * Выполняет метод getSession.
    * @returns Результат выполнения getSession.
    */
-
   public async getSession(): Promise<SessionDto> {
     return await apiService.getSession()
   }

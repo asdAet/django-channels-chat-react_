@@ -29,4 +29,3 @@ export async function updateProfile(
   const response = await apiClient.post<unknown>('/auth/profile/', form)
   return decodeProfileEnvelopeResponse(response.data)
 }
-
