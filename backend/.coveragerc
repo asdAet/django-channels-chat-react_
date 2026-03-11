@@ -1,7 +1,11 @@
 [run]
 branch = True
 source =
+    auditlog
     chat
+    friends
+    groups
+    roles
     users
     chat_app_django
 omit =
