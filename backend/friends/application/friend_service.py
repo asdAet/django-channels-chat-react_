@@ -18,7 +18,7 @@ from friends.models import Friendship
 
 def _ensure_authenticated(actor) -> None:
     if not actor or not getattr(actor, "is_authenticated", False):
-        raise FriendForbiddenError("Authentication required")
+        raise FriendForbiddenError("Требуется аутентификация")
 
 
 def _normalize_username(raw: str) -> str:
@@ -34,7 +34,7 @@ def _friend_from_user_id(friendship: Friendship) -> int:
     from_user = getattr(friendship, "from_user", None)
     from_user_pk = getattr(from_user, "pk", None)
     if from_user_pk is None:
-        raise FriendServiceError("Friendship sender is missing")
+        raise FriendServiceError("Не указан отправитель дружбы")
     return int(from_user_pk)
 
 
@@ -45,7 +45,7 @@ def _friend_to_user_id(friendship: Friendship) -> int:
     to_user = getattr(friendship, "to_user", None)
     to_user_pk = getattr(to_user, "pk", None)
     if to_user_pk is None:
-        raise FriendServiceError("Friendship recipient is missing")
+        raise FriendServiceError("Не указан получатель дружбы")
     return int(to_user_pk)
 
 
@@ -87,14 +87,14 @@ def send_request(actor, target_username: str) -> Friendship:
     _ensure_authenticated(actor)
     username = _normalize_username(target_username)
     if not username:
-        raise FriendServiceError("Username is required")
+        raise FriendServiceError("Требуется имя пользователя")
 
     target = repositories.get_user_by_username(username)
     if not target:
-        raise FriendNotFoundError("User not found")
+        raise FriendNotFoundError("Пользователь не найден")
 
     if rules.is_self_request(actor.pk, target.pk):
-        raise FriendServiceError("Cannot send friend request to yourself")
+        raise FriendServiceError("Нельзя отправить заявку в друзья самому себе")
 
     outgoing = repositories.get_friendship(actor, target)
     incoming = repositories.get_friendship(target, actor)
@@ -109,7 +109,7 @@ def send_request(actor, target_username: str) -> Friendship:
     # Auto-accept if they already sent us a request
     if rules.should_auto_accept(incoming.status if incoming else None):
         if incoming is None:
-            raise FriendConflictError("Incoming request not found")
+            raise FriendConflictError("Входящая заявка не найдена")
         with transaction.atomic():
             incoming.status = Friendship.Status.ACCEPTED
             incoming.save(update_fields=["status", "updated_at"])
@@ -155,13 +155,13 @@ def accept_request(actor, friendship_id: int) -> Friendship:
     _ensure_authenticated(actor)
     friendship = repositories.get_friendship_by_id(int(friendship_id))
     if not friendship or friendship.status != Friendship.Status.PENDING:
-        raise FriendNotFoundError("Pending request not found")
+        raise FriendNotFoundError("Заявка в ожидании не найдена")
 
     if not rules.can_accept_request(
         request_to_user_id=_friend_to_user_id(friendship),
         actor_id=actor.pk,
     ):
-        raise FriendForbiddenError("Only the recipient can accept this request")
+        raise FriendForbiddenError("Только получатель может принять эту заявку")
 
     with transaction.atomic():
         friendship.status = Friendship.Status.ACCEPTED
@@ -188,13 +188,13 @@ def decline_request(actor, friendship_id: int) -> Friendship:
     _ensure_authenticated(actor)
     friendship = repositories.get_friendship_by_id(int(friendship_id))
     if not friendship or friendship.status != Friendship.Status.PENDING:
-        raise FriendNotFoundError("Pending request not found")
+        raise FriendNotFoundError("Заявка в ожидании не найдена")
 
     if not rules.can_decline_request(
         request_to_user_id=_friend_to_user_id(friendship),
         actor_id=actor.pk,
     ):
-        raise FriendForbiddenError("Only the recipient can decline this request")
+        raise FriendForbiddenError("Только получатель может отклонить эту заявку")
 
     friendship.status = Friendship.Status.DECLINED
     friendship.save(update_fields=["status", "updated_at"])
@@ -216,11 +216,11 @@ def remove_friend(actor, target_user_id: int) -> None:
     _ensure_authenticated(actor)
     target = repositories.get_user_by_id(int(target_user_id))
     if not target:
-        raise FriendNotFoundError("User not found")
+        raise FriendNotFoundError("Пользователь не найден")
 
     deleted = repositories.delete_friendship_pair(actor, target)
     if not deleted:
-        raise FriendNotFoundError("Friendship not found")
+        raise FriendNotFoundError("Дружба не найдена")
 
     audit_security_event(
         "friendship.removed",
@@ -239,14 +239,14 @@ def block_user(actor, target_username: str) -> Friendship:
     _ensure_authenticated(actor)
     username = _normalize_username(target_username)
     if not username:
-        raise FriendServiceError("Username is required")
+        raise FriendServiceError("Требуется имя пользователя")
 
     target = repositories.get_user_by_username(username)
     if not target:
-        raise FriendNotFoundError("User not found")
+        raise FriendNotFoundError("Пользователь не найден")
 
     if rules.is_self_request(actor.pk, target.pk):
-        raise FriendServiceError("Cannot block yourself")
+        raise FriendServiceError("Нельзя заблокировать самого себя")
 
     with transaction.atomic():
         # Remove any existing reverse friendship
@@ -276,11 +276,11 @@ def unblock_user(actor, target_user_id: int) -> None:
     _ensure_authenticated(actor)
     target = repositories.get_user_by_id(int(target_user_id))
     if not target:
-        raise FriendNotFoundError("User not found")
+        raise FriendNotFoundError("Пользователь не найден")
 
     friendship = repositories.get_friendship(actor, target)
     if not friendship or friendship.status != Friendship.Status.BLOCKED:
-        raise FriendNotFoundError("Block not found")
+        raise FriendNotFoundError("Блокировка не найдена")
 
     friendship.delete()
 

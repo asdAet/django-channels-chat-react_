@@ -332,7 +332,7 @@ class ChatConsumerTests(TransactionTestCase):
             self.assertTrue(connected)
 
             channel_layer = get_channel_layer()
-            self.assertIsNotNone(channel_layer)
+            assert channel_layer is not None
             await channel_layer.group_send(
                 f"chat_room_{self.private_room.pk}",
                 {

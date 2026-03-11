@@ -1,4 +1,4 @@
-# EchoChat frontend
+# Devil frontend
 
 Одностраничный интерфейс на React + TypeScript для Django-чата. Вся работа с сессиями и профилями идёт через JSON API, а WebSocket-подключения остаются совместимыми с Channels.
 

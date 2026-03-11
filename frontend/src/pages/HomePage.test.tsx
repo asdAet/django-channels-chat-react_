@@ -16,7 +16,7 @@ describe('HomePage', () => {
   it('shows welcome text', () => {
     render(<HomePage user={user} onNavigate={vi.fn()} />)
     expect(screen.getByText('Выберите чат, чтобы начать общение')).toBeInTheDocument()
-    expect(screen.getByText('EchoChat')).toBeInTheDocument()
+    expect(screen.getByText('Devil')).toBeInTheDocument()
   })
 
   it('shows auth buttons for unauthenticated user', () => {

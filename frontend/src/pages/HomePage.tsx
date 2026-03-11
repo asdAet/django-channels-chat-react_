@@ -24,7 +24,7 @@ export function HomePage({ user, onNavigate }: Props) {
           </svg>
         </div>
 
-        <h2 className={styles.welcomeTitle}>EchoChat</h2>
+        <h2 className={styles.welcomeTitle}>Devil</h2>
         <p className={styles.welcomeText}>Выберите чат, чтобы начать общение</p>
 
         {!user && (
