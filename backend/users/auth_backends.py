@@ -11,8 +11,16 @@ from .models import EmailIdentity
 
 
 class EmailIdentityBackend(BaseBackend):
-    def authenticate(self, request, email: str | None = None, password: str | None = None, **kwargs):
-        normalized = normalize_email(email)
+    def authenticate(
+        self,
+        request,
+        username: str | None = None,
+        password: str | None = None,
+        **kwargs,
+    ):
+        raw_email = kwargs.get("email", username)
+        email_value = raw_email if isinstance(raw_email, str) else str(raw_email or "")
+        normalized = normalize_email(email_value)
         if not normalized or not password:
             return None
 

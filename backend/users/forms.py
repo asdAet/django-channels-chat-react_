@@ -60,6 +60,39 @@ class EmailRegisterForm(forms.Form):
         return cleaned
 
 
+class UserUpdateForm(forms.ModelForm):
+    email = forms.EmailField(required=False)
+
+    class Meta:
+        model = User
+        fields = ["username", "email"]
+
+    def clean_username(self):
+        username = (self.cleaned_data.get("username") or "").strip()
+        if not username:
+            return ""
+        if len(username) > USERNAME_MAX_LENGTH:
+            raise forms.ValidationError(f"Максимум {USERNAME_MAX_LENGTH} символов.")
+
+        qs = User.objects.filter(username=username)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("Имя пользователя уже занято")
+        return username
+
+    def clean_email(self):
+        email = normalize_email(self.cleaned_data.get("email"))
+        if not email:
+            return ""
+        qs = User.objects.filter(email__iexact=email)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise forms.ValidationError("Email уже используется")
+        return email
+
+
 class ProfileIdentityUpdateForm(forms.Form):
     name = forms.CharField(required=False, max_length=150)
     username = forms.CharField(required=False, max_length=USERNAME_MAX_LENGTH)

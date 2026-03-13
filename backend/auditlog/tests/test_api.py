@@ -108,3 +108,52 @@ class AuditApiTests(TestCase):
         self.assertEqual(items[0]["oldUsername"], "old_name")
         self.assertEqual(items[0]["newUsername"], "new_name")
 
+    def test_events_endpoint_returns_400_for_invalid_filters(self):
+        self.client.force_login(self.staff)
+        response = self.client.get("/api/admin/audit/events/", {"limit": "0"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_event_detail_returns_404_when_missing(self):
+        self.client.force_login(self.staff)
+        response = self.client.get("/api/admin/audit/events/999999/")
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("error", response.json())
+
+    def test_event_detail_returns_item_when_present(self):
+        event = AuditEvent.objects.create(
+            action="auth.login.success",
+            actor_user_id_snapshot=self.actor_one.pk,
+            actor_username_snapshot=self.actor_one.username,
+            is_authenticated=True,
+            success=True,
+        )
+        self.client.force_login(self.staff)
+        response = self.client.get(f"/api/admin/audit/events/{event.pk}/")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["item"]
+        self.assertEqual(payload["id"], event.pk)
+        self.assertEqual(payload["action"], "auth.login.success")
+
+    def test_actions_endpoint_returns_400_for_invalid_filters(self):
+        self.client.force_login(self.staff)
+        response = self.client.get("/api/admin/audit/actions/", {"success": "maybe"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("error", response.json())
+
+    def test_username_history_rejects_invalid_limit(self):
+        self.client.force_login(self.staff)
+        bad_type = self.client.get(
+            f"/api/admin/audit/users/{self.actor_one.pk}/username-history/",
+            {"limit": "abc"},
+        )
+        self.assertEqual(bad_type.status_code, 400)
+        self.assertIn("error", bad_type.json())
+
+        bad_range = self.client.get(
+            f"/api/admin/audit/users/{self.actor_one.pk}/username-history/",
+            {"limit": "0"},
+        )
+        self.assertEqual(bad_range.status_code, 400)
+        self.assertIn("error", bad_range.json())
+

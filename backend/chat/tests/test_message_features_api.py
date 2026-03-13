@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 
+from chat.services import MessageForbiddenError
 from messages.models import Message, Reaction
 from rooms.models import Room
 from rooms.services import ensure_membership
+from users.identity import ensure_profile
 
 User = get_user_model()
 
@@ -21,12 +24,15 @@ class ChatMessageFeatureApiTests(TestCase):
         self.owner = User.objects.create_user(username="owner_feat", password="pass12345")
         self.peer = User.objects.create_user(username="peer_feat", password="pass12345")
         self.outsider = User.objects.create_user(username="outsider_feat", password="pass12345")
-        self.owner.profile.username = self.owner.username
-        self.owner.profile.save(update_fields=["username"])
-        self.peer.profile.username = self.peer.username
-        self.peer.profile.save(update_fields=["username"])
-        self.outsider.profile.username = self.outsider.username
-        self.outsider.profile.save(update_fields=["username"])
+        owner_profile = ensure_profile(self.owner)
+        owner_profile.username = self.owner.username
+        owner_profile.save(update_fields=["username"])
+        peer_profile = ensure_profile(self.peer)
+        peer_profile.username = self.peer.username
+        peer_profile.save(update_fields=["username"])
+        outsider_profile = ensure_profile(self.outsider)
+        outsider_profile.username = self.outsider.username
+        outsider_profile.save(update_fields=["username"])
 
         self.direct_room = Room.objects.create(
             slug="dm_features_01",
@@ -74,8 +80,9 @@ class ChatMessageFeatureApiTests(TestCase):
         ensure_membership(visible_group, self.owner, role_name="Owner")
 
         scope_friend = User.objects.create_user(username="scope_friend", password="pass12345")
-        scope_friend.profile.username = scope_friend.username
-        scope_friend.profile.save(update_fields=["username"])
+        scope_friend_profile = ensure_profile(scope_friend)
+        scope_friend_profile.username = scope_friend.username
+        scope_friend_profile.save(update_fields=["username"])
         ensure_membership(visible_group, scope_friend, role_name="Member")
 
         hidden_group = Room.objects.create(
@@ -89,8 +96,9 @@ class ChatMessageFeatureApiTests(TestCase):
         ensure_membership(hidden_group, self.outsider, role_name="Owner")
 
         hidden_scope_user = User.objects.create_user(username="scope_hidden", password="pass12345")
-        hidden_scope_user.profile.username = hidden_scope_user.username
-        hidden_scope_user.profile.save(update_fields=["username"])
+        hidden_scope_profile = ensure_profile(hidden_scope_user)
+        hidden_scope_profile.username = hidden_scope_user.username
+        hidden_scope_profile.save(update_fields=["username"])
         ensure_membership(hidden_group, hidden_scope_user, role_name="Member")
 
         visible_msg = Message.objects.create(
@@ -234,8 +242,9 @@ class ChatMessageFeatureApiTests(TestCase):
         self.assertIn(public_group.slug, found_group_slugs)
 
     def test_global_search_supports_handle_query_for_updated_username(self):
-        self.peer.profile.username = "peerfeatureupdated"
-        self.peer.profile.save(update_fields=["username"])
+        peer_profile = ensure_profile(self.peer)
+        peer_profile.username = "peerfeatureupdated"
+        peer_profile.save(update_fields=["username"])
 
         self.client.force_login(self.owner)
         response = self.client.get("/api/chat/search/global/?q=@peerfeatureupdated")
@@ -449,3 +458,193 @@ class ChatMessageFeatureApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["lastReadMessageId"], message.pk)
+
+    def test_message_detail_patch_validates_content_type_and_empty_value(self):
+        message = Message.objects.create(
+            username=self.owner.username,
+            user=self.owner,
+            room=self.direct_room,
+            message_content="initial",
+        )
+        self.client.force_login(self.owner)
+
+        not_string = self.client.patch(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/",
+            data=json.dumps({"content": 123}),
+            content_type="application/json",
+        )
+        self.assertEqual(not_string.status_code, 400)
+
+        empty = self.client.patch(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/",
+            data=json.dumps({"content": "   "}),
+            content_type="application/json",
+        )
+        self.assertEqual(empty.status_code, 400)
+
+    def test_message_detail_patch_and_delete_cover_success_and_not_found(self):
+        message = Message.objects.create(
+            username=self.owner.username,
+            user=self.owner,
+            room=self.direct_room,
+            message_content="initial",
+        )
+        self.client.force_login(self.owner)
+
+        patch_response = self.client.patch(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/",
+            data=json.dumps({"content": "updated"}),
+            content_type="application/json",
+        )
+        self.assertEqual(patch_response.status_code, 200)
+        self.assertEqual(patch_response.json()["content"], "updated")
+
+        not_found = self.client.patch(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/999999/",
+            data=json.dumps({"content": "x"}),
+            content_type="application/json",
+        )
+        self.assertEqual(not_found.status_code, 404)
+
+        delete_response = self.client.delete(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/"
+        )
+        self.assertEqual(delete_response.status_code, 204)
+        message.refresh_from_db()
+        self.assertTrue(message.is_deleted)
+
+    def test_message_detail_delete_returns_forbidden_for_non_author(self):
+        message = Message.objects.create(
+            username=self.owner.username,
+            user=self.owner,
+            room=self.direct_room,
+            message_content="cant delete by peer",
+        )
+        self.client.force_login(self.peer)
+
+        response = self.client.delete(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/"
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_message_reactions_handles_forbidden_and_remove_flow(self):
+        message = Message.objects.create(
+            username=self.owner.username,
+            user=self.owner,
+            room=self.direct_room,
+            message_content="reactions",
+        )
+        self.client.force_login(self.peer)
+
+        with patch("chat.api.add_reaction", side_effect=MessageForbiddenError("forbidden")):
+            forbidden = self.client.post(
+                f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/reactions/",
+                data=json.dumps({"emoji": "👍"}),
+                content_type="application/json",
+            )
+        self.assertEqual(forbidden.status_code, 403)
+
+        added = self.client.post(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/reactions/",
+            data=json.dumps({"emoji": "👍"}),
+            content_type="application/json",
+        )
+        self.assertEqual(added.status_code, 200)
+        self.assertTrue(
+            Reaction.objects.filter(message=message, user=self.peer, emoji="👍").exists()
+        )
+
+        removed = self.client.delete(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/{message.pk}/reactions/%F0%9F%91%8D/"
+        )
+        self.assertEqual(removed.status_code, 204)
+        self.assertFalse(
+            Reaction.objects.filter(message=message, user=self.peer, emoji="👍").exists()
+        )
+
+    def test_search_messages_handles_validation_and_pagination(self):
+        first = Message.objects.create(
+            username=self.peer.username,
+            user=self.peer,
+            room=self.direct_room,
+            message_content="needle first",
+        )
+        second = Message.objects.create(
+            username=self.peer.username,
+            user=self.peer,
+            room=self.direct_room,
+            message_content="needle second",
+        )
+        Message.objects.create(
+            username=self.peer.username,
+            user=self.peer,
+            room=self.direct_room,
+            message_content="other",
+        )
+
+        self.client.force_login(self.owner)
+        short = self.client.get(f"/api/chat/rooms/{self.direct_room.slug}/messages/search/?q=x")
+        self.assertEqual(short.status_code, 400)
+
+        page = self.client.get(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/search/?q=needle&limit=1&before=bad"
+        )
+        self.assertEqual(page.status_code, 200)
+        payload = page.json()
+        self.assertEqual(payload["pagination"]["limit"], 1)
+        self.assertTrue(payload["pagination"]["hasMore"])
+        self.assertEqual(len(payload["results"]), 1)
+
+        before_filtered = self.client.get(
+            f"/api/chat/rooms/{self.direct_room.slug}/messages/search/?q=needle&before={second.pk}"
+        )
+        self.assertEqual(before_filtered.status_code, 200)
+        ids = {item["id"] for item in before_filtered.json()["results"]}
+        self.assertIn(first.pk, ids)
+        self.assertNotIn(second.pk, ids)
+
+    def test_mark_read_validation_public_short_circuit_and_unread_counts(self):
+        message = Message.objects.create(
+            username=self.peer.username,
+            user=self.peer,
+            room=self.direct_room,
+            message_content="for unread",
+        )
+        self.client.force_login(self.owner)
+
+        bool_payload = self.client.post(
+            f"/api/chat/rooms/{self.direct_room.slug}/read/",
+            data=json.dumps({"lastReadMessageId": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(bool_payload.status_code, 400)
+
+        negative_payload = self.client.post(
+            f"/api/chat/rooms/{self.direct_room.slug}/read/",
+            data=json.dumps({"lastReadMessageId": -1}),
+            content_type="application/json",
+        )
+        self.assertEqual(negative_payload.status_code, 400)
+
+        unread_before = self.client.get("/api/chat/rooms/unread/")
+        self.assertEqual(unread_before.status_code, 200)
+        self.assertTrue(any(item["roomSlug"] == self.direct_room.slug for item in unread_before.json()["items"]))
+
+        read_ok = self.client.post(
+            f"/api/chat/rooms/{self.direct_room.slug}/read/",
+            data=json.dumps({"lastReadMessageId": message.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(read_ok.status_code, 200)
+
+        unread_after = self.client.get("/api/chat/rooms/unread/")
+        self.assertEqual(unread_after.status_code, 200)
+        self.assertFalse(any(item["roomSlug"] == self.direct_room.slug for item in unread_after.json()["items"]))
+
+        public_short = self.client.post(
+            "/api/chat/rooms/public/read/",
+            data=json.dumps({"lastReadMessageId": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(public_short.status_code, 200)
+        self.assertIsNone(public_short.json()["lastReadMessageId"])

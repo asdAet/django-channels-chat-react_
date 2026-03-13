@@ -104,7 +104,7 @@ def _rate_limited(request, action: str) -> bool:
 
 
 def _identity_error_response(exc: IdentityServiceError) -> Response:
-    payload = {
+    payload: dict[str, object] = {
         "error": exc.message,
         "code": exc.code,
     }
@@ -307,8 +307,14 @@ def profile_view(request):
             auth_service.set_profile_name(user, next_name)
 
     if "username" in payload:
+        raw_username = payload.get("username")
+        username_value: str | None
+        if raw_username is None or isinstance(raw_username, str):
+            username_value = raw_username
+        else:
+            username_value = str(raw_username)
         try:
-            auth_service.set_username(user, payload.get("username"))
+            auth_service.set_username(user, username_value)
         except IdentityServiceError as exc:
             for field, field_errors in exc.errors.items():
                 errors[field] = field_errors
@@ -319,8 +325,9 @@ def profile_view(request):
     if media_form.is_valid():
         media_form.save()
     else:
-        for field, field_errors in media_form.errors.items():
-            errors[field] = list(field_errors)
+        form_errors = media_form.errors or {}
+        for field, field_errors in form_errors.items():
+            errors[field] = [str(error_item) for error_item in field_errors]
 
     if errors:
         audit_http_event("auth.profile.update.failed", request, username=user_public_username(user), errors=errors)

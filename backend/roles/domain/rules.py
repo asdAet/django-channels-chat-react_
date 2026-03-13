@@ -82,7 +82,7 @@ def can_manage_target(*, actor_top_position: int, target_position: int) -> bool:
     return int(actor_top_position) > int(target_position)
 
 
-def normalize_role_ids(raw_role_ids: Iterable[int]) -> list[int]:
+def normalize_role_ids(raw_role_ids: Iterable[int | str]) -> list[int]:
     """Normalizes list of positive role ids while preserving input order."""
     result: list[int] = []
     seen: set[int] = set()

@@ -10,7 +10,7 @@ import requests
 from django.conf import settings
 from django.contrib.auth import password_validation
 from django.contrib.auth.hashers import check_password, make_password
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AbstractUser, User
 from django.db import IntegrityError, transaction
 from django.utils.html import strip_tags
 
@@ -424,7 +424,7 @@ def authenticate_or_signup_with_google(id_token: str = "", access_token: str = "
     return user
 
 
-def set_username(user: User, username: str | None) -> str | None:
+def set_username(user: AbstractUser, username: str | None) -> str | None:
     profile = ensure_profile(user)
 
     if username is None or not str(username).strip():
@@ -454,7 +454,7 @@ def set_username(user: User, username: str | None) -> str | None:
     return normalized
 
 
-def set_profile_name(user: User, name: str | None) -> str:
+def set_profile_name(user: AbstractUser, name: str | None) -> str:
     profile = ensure_profile(user)
     next_name = strip_tags((name or "").strip())
     profile.name = next_name

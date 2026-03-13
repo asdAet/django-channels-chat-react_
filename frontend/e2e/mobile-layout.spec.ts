@@ -7,10 +7,9 @@ const hasNoHorizontalOverflow = async (page: Page) =>
   });
 
 async function register(page: Page, username: string, password: string) {
+  const email = `${username}@e2e.local`;
   await page.goto("/register");
-  await page.getByTestId("auth-name-input").fill("Test");
-  await page.getByTestId("auth-last-name-input").fill("User");
-  await page.getByTestId("auth-username-input").fill(username);
+  await page.getByTestId("auth-email-input").fill(email);
   await page.getByTestId("auth-password-input").fill(password);
   await page.getByTestId("auth-confirm-input").fill(password);
 

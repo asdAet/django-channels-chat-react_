@@ -12,22 +12,18 @@ class BrowsableApiFormsTests(TestCase):
         self.user = User.objects.create_user(username="browsable_user", password="pass12345")
         self.peer = User.objects.create_user(username="browsable_peer", password="pass12345")
 
-    def _get_html(self, path: str) -> str:
+    def _get_html(self, path: str, expected_status: int = 200) -> str:
         response = self.client.get(path, HTTP_ACCEPT="text/html")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("text/html", response["Content-Type"])
+        self.assertEqual(response.status_code, expected_status)
+        if expected_status == 200:
+            self.assertIn("text/html", response["Content-Type"])
         return response.content.decode("utf-8", errors="ignore")
 
-    def test_login_form_shows_username_and_password_fields(self):
-        html = self._get_html("/api/auth/login/")
-        self.assertIn('name="username"', html)
-        self.assertIn('name="password"', html)
+    def test_login_endpoint_rejects_get_for_browsable_form(self):
+        self._get_html("/api/auth/login/", expected_status=405)
 
-    def test_register_form_shows_expected_fields(self):
-        html = self._get_html("/api/auth/register/")
-        self.assertIn('name="username"', html)
-        self.assertIn('name="password1"', html)
-        self.assertIn('name="password2"', html)
+    def test_register_endpoint_rejects_get_for_browsable_form(self):
+        self._get_html("/api/auth/register/", expected_status=405)
 
     def test_direct_start_form_shows_username_for_authenticated_user(self):
         self.client.force_login(self.user)
@@ -37,14 +33,8 @@ class BrowsableApiFormsTests(TestCase):
     def test_profile_form_shows_profile_update_fields_for_authenticated_user(self):
         self.client.force_login(self.user)
         html = self._get_html("/api/auth/profile/")
-        self.assertIn('name="username"', html)
-        self.assertIn('name="email"', html)
-        self.assertIn('name="bio"', html)
-        self.assertIn('name="image"', html)
-        self.assertIn('name="avatarCropX"', html)
-        self.assertIn('name="avatarCropY"', html)
-        self.assertIn('name="avatarCropWidth"', html)
-        self.assertIn('name="avatarCropHeight"', html)
+        self.assertIn('name="_content_type"', html)
+        self.assertIn('name="_content"', html)
 
     def test_friends_send_request_form_shows_username_for_authenticated_user(self):
         self.client.force_login(self.user)

@@ -67,8 +67,9 @@ class AuthApiTests(TestCase):
         self.assertIsNone(payload.get("user", {}).get("publicUsername"))
 
         identity = EmailIdentity.objects.get(email_normalized="new@example.com")
-        self.assertEqual(identity.user.profile.name, "new")
-        self.assertIsNone(identity.user.profile.username)
+        profile = ensure_profile(identity.user)
+        self.assertEqual(profile.name, "new")
+        self.assertIsNone(profile.username)
 
     def test_register_duplicate_email_returns_conflict(self):
         self._create_email_user(email="taken@example.com", password="pass12345")

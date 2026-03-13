@@ -14,6 +14,7 @@ from django.test import Client, RequestFactory, SimpleTestCase, TestCase
 
 from chat_app_django.http_utils import parse_request_payload
 from users import api
+from users.identity import ensure_profile
 
 User = get_user_model()
 
@@ -71,10 +72,19 @@ class UsersApiHelpersTests(SimpleTestCase):
         request = _InvalidJsonRequest(body=b'{bad-json', post={})
         self.assertEqual(parse_request_payload(request), {})
 
-    def test_collect_errors_merges_dicts(self):
-        """Проверяет сценарий `test_collect_errors_merges_dicts`."""
-        merged = api._collect_errors({'username': ['taken']}, {'password': ['weak']})
-        self.assertEqual(merged, {'username': ['taken'], 'password': ['weak']})
+    def test_identity_error_response_returns_error_and_errors_fields(self):
+        """Проверяет сценарий `test_identity_error_response_returns_error_and_errors_fields`."""
+        from users.application.errors import IdentityServiceError
+
+        response = api._identity_error_response(
+            IdentityServiceError("Ошибка валидации", errors={"email": ["Укажите email"]})
+        )
+        self.assertEqual(response.status_code, 400)
+        payload = response.data
+        if not isinstance(payload, dict):
+            self.fail("Expected response payload to be a dict")
+        self.assertEqual(payload["error"], "Ошибка валидации")
+        self.assertEqual(payload["errors"], {"email": ["Укажите email"]})
 
     def test_public_profile_view_returns_404_when_username_empty(self):
         """Проверяет сценарий `test_public_profile_view_returns_404_when_username_empty`."""
@@ -112,14 +122,14 @@ class AuthApiEdgeTests(TestCase):
             HTTP_X_CSRFTOKEN=csrf,
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn('body', response.json()['errors'])
+        self.assertIn('credentials', response.json()['errors'])
 
     def test_login_requires_both_username_and_password(self):
         """Проверяет сценарий `test_login_requires_both_username_and_password`."""
         csrf = self._csrf()
         response = self.client.post(
             '/api/auth/login/',
-            data=json.dumps({'username': 'only-name'}),
+            data=json.dumps({'email': 'only-name@example.com'}),
             content_type='application/json',
             HTTP_X_CSRFTOKEN=csrf,
         )
@@ -129,8 +139,7 @@ class AuthApiEdgeTests(TestCase):
     def test_register_get_returns_usage_hint(self):
         """Проверяет сценарий `test_register_get_returns_usage_hint`."""
         response = self.client.get('/api/auth/register/')
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('POST', response.json()['detail'])
+        self.assertEqual(response.status_code, 405)
 
     def test_register_rejects_empty_payload(self):
         """Проверяет сценарий `test_register_rejects_empty_payload`."""
@@ -142,7 +151,7 @@ class AuthApiEdgeTests(TestCase):
             HTTP_X_CSRFTOKEN=csrf,
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn('body', response.json()['errors'])
+        self.assertIn('email', response.json()['errors'])
 
     def test_register_rejects_missing_username(self):
         """Проверяет сценарий `test_register_rejects_missing_username`."""
@@ -154,14 +163,14 @@ class AuthApiEdgeTests(TestCase):
             HTTP_X_CSRFTOKEN=csrf,
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn('username', response.json()['errors'])
+        self.assertIn('email', response.json()['errors'])
 
     def test_register_rejects_missing_password(self):
         """Проверяет сценарий `test_register_rejects_missing_password`."""
         csrf = self._csrf()
         response = self.client.post(
             '/api/auth/register/',
-            data=json.dumps({'name': 'Edge User', 'username': 'edge_user'}),
+            data=json.dumps({'email': 'edge_user@example.com'}),
             content_type='application/json',
             HTTP_X_CSRFTOKEN=csrf,
         )
@@ -175,8 +184,7 @@ class AuthApiEdgeTests(TestCase):
             '/api/auth/register/',
             data=json.dumps(
                 {
-                    'name': 'Edge User',
-                    'username': 'edge_user',
+                    'email': 'edge_user@example.com',
                     'password1': 'pass12345',
                     'password2': 'pass54321',
                 }
@@ -190,12 +198,11 @@ class AuthApiEdgeTests(TestCase):
     def test_register_returns_summary_for_non_password_form_errors(self):
         """Проверяет сценарий `test_register_returns_summary_for_non_password_form_errors`."""
         csrf = self._csrf()
-        response = self.client.post(
+        first = self.client.post(
             '/api/auth/register/',
             data=json.dumps(
                 {
-                    'name': 'Bad Username',
-                    'username': 'bad user name',
+                    'email': 'duplicate@example.com',
                     'password1': 'pass12345',
                     'password2': 'pass12345',
                 }
@@ -203,10 +210,25 @@ class AuthApiEdgeTests(TestCase):
             content_type='application/json',
             HTTP_X_CSRFTOKEN=csrf,
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(first.status_code, 201)
+
+        csrf = self._csrf()
+        response = self.client.post(
+            '/api/auth/register/',
+            data=json.dumps(
+                {
+                    'email': 'duplicate@example.com',
+                    'password1': 'pass12345',
+                    'password2': 'pass12345',
+                }
+            ),
+            content_type='application/json',
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(response.status_code, 409)
         payload = response.json()
         self.assertIn('errors', payload)
-        self.assertIn('username', payload['errors'])
+        self.assertIn('email', payload['errors'])
         self.assertTrue(payload['error'])
 
     def test_logout_handles_operational_error_when_updating_last_seen(self):
@@ -214,7 +236,8 @@ class AuthApiEdgeTests(TestCase):
         self.client.force_login(self.user)
         csrf = self._csrf()
 
-        with patch.object(type(self.user.profile), 'save', side_effect=OperationalError):
+        profile = ensure_profile(self.user)
+        with patch.object(type(profile), 'save', side_effect=OperationalError):
             response = self.client.post('/api/auth/logout/', HTTP_X_CSRFTOKEN=csrf)
 
         self.assertEqual(response.status_code, 200)
