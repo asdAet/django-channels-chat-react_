@@ -190,6 +190,26 @@ class AuthApiTests(TestCase):
         self.assertTrue(payload.get("authenticated"))
         self.assertEqual(payload.get("user", {}).get("email"), "login@example.com")
 
+    def test_login_success_for_django_superuser_without_identity_rows(self):
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        User.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="adminpass123",
+        )
+
+        csrf = self._csrf()
+        login_response = self.client.post(
+            "/api/auth/login/",
+            data=json.dumps({"identifier": "admin", "password": "adminpass123"}),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=csrf,
+        )
+        self.assertEqual(login_response.status_code, 200)
+        self.assertTrue(login_response.json().get("authenticated"))
+
     @override_settings(AUTH_RATE_LIMIT=1, AUTH_RATE_WINDOW=60)
     def test_login_rate_limit(self):
         csrf = self._csrf()

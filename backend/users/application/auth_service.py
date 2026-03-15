@@ -66,6 +66,27 @@ def _looks_like_email(identifier: str) -> bool:
     return bool(_EMAIL_RE.fullmatch(identifier))
 
 
+def _authenticate_legacy_admin(identifier: str, password: str) -> User | None:
+    """
+    Allow Django-admin accounts created via `createsuperuser` to use API login.
+
+    Such accounts may not have LoginIdentity/EmailIdentity rows, but can still
+    be authenticated by Django's password hash on User model.
+    """
+    if _looks_like_email(identifier):
+        user = User.objects.filter(email__iexact=identifier).first()
+    else:
+        user = User.objects.filter(username__iexact=identifier).first()
+
+    if user is None or not user.is_active:
+        return None
+    if not (user.is_staff or user.is_superuser):
+        return None
+    if not user.check_password(password):
+        return None
+    return user
+
+
 def _ensure_login_identity(user: AbstractUser) -> LoginIdentity:
     existing = getattr(user, "login_identity", None)
     if existing is not None:
@@ -212,7 +233,13 @@ def login_user(identifier: str, password: str) -> User:
             .first()
         )
 
-    if identity is None or not check_password(password, identity.password_hash):
+    if identity is None:
+        legacy_admin = _authenticate_legacy_admin(normalized_identifier, password)
+        if legacy_admin is not None:
+            return legacy_admin
+        raise _invalid_credentials_error()
+
+    if not check_password(password, identity.password_hash):
         raise _invalid_credentials_error()
 
     return identity.user

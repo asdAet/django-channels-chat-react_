@@ -6,12 +6,15 @@ import time
 from unittest.mock import patch
 
 import requests
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from users.application import auth_service
 from users.application.errors import IdentityConflictError, IdentityServiceError, IdentityUnauthorizedError
 from users.identity import ensure_user_identity_core, user_public_ref
 from users.models import EmailIdentity, LoginIdentity, OAuthIdentity
+
+User = get_user_model()
 
 
 class _MockResponse:
@@ -80,6 +83,28 @@ class AuthServiceUnitTests(TestCase):
             auth_service.login_user("svc_login", "wrong")
         with self.assertRaises(IdentityUnauthorizedError):
             auth_service.login_user("missing", "pass12345")
+
+    def test_login_user_supports_superuser_created_via_django_admin_flow(self):
+        admin = User.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="adminpass123",
+        )
+        self.assertFalse(LoginIdentity.objects.filter(user=admin).exists())
+
+        self.assertEqual(auth_service.login_user("admin", "adminpass123"), admin)
+        self.assertEqual(auth_service.login_user("admin@example.com", "adminpass123"), admin)
+
+    def test_login_user_rejects_non_staff_without_identity_records(self):
+        legacy_user = User.objects.create_user(
+            username="legacy_user",
+            email="legacy@example.com",
+            password="legacypass123",
+        )
+        self.assertFalse(LoginIdentity.objects.filter(user=legacy_user).exists())
+
+        with self.assertRaises(IdentityUnauthorizedError):
+            auth_service.login_user("legacy_user", "legacypass123")
 
     @override_settings(GOOGLE_OAUTH_CLIENT_ID="")
     def test_get_expected_google_audience_requires_setting(self):

@@ -332,6 +332,8 @@ LOGIN_REDIRECT_URL = "chat-home"
 LOGIN_URL = "login"
 AUTHENTICATION_BACKENDS = [
     "users.auth_backends.EmailIdentityBackend",
+    # Keep Django ModelBackend for /admin login (createsuperuser uses username/password).
+    "django.contrib.auth.backends.ModelBackend",
 ]
 _DEV_ORIGINS = [
     "http://localhost:5173",
