@@ -127,22 +127,6 @@ const IconLogout = () => (
   </svg>
 );
 
-const IconCompose = () => (
-  <svg
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="12" y1="5" x2="12" y2="19" />
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-);
-
 export function Sidebar({ user, onNavigate, onLogout }: Props) {
   const location = useLocation();
   const { unreadDialogsCount } = useDirectInbox();
@@ -328,17 +312,6 @@ export function Sidebar({ user, onNavigate, onLogout }: Props) {
             <div className={styles.emptyHint}>Войдите, чтобы видеть беседы</div>
           )}
         </div>
-
-        {user && (
-          <button
-            type="button"
-            className={styles.fab}
-            aria-label="Новое сообщение"
-            onClick={() => onNavigate("/direct")}
-          >
-            <IconCompose />
-          </button>
-        )}
       </div>
 
       {user ? (

@@ -3,7 +3,8 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { decodePublicRefParam, decodeRoomRefParam } from "../dto";
 import type { UserProfile } from "../entities/user/types";
 import { ChatRoomPage } from "../pages/ChatRoomPage";
-import { DirectLayout } from "../pages/DirectLayout";
+import { DirectChatByUsernamePage } from "../pages/DirectChatByUsernamePage";
+import { DirectChatsPage } from "../pages/DirectChatsPage";
 import { HomePage } from "../pages/HomePage";
 import { LoginPage } from "../pages/LoginPage";
 import { ProfilePage } from "../pages/ProfilePage";
@@ -83,7 +84,7 @@ function DirectRoute({
     return <Navigate to="/direct" replace />;
   }
 
-  return <DirectLayout user={user} publicRef={ref} onNavigate={onNavigate} />;
+  return <DirectChatByUsernamePage user={user} publicRef={ref} onNavigate={onNavigate} />;
 }
 
 /**
@@ -197,7 +198,7 @@ export function AppRoutes({
       />
       <Route
         path="/direct"
-        element={<DirectLayout user={user} onNavigate={onNavigate} />}
+        element={<DirectChatsPage user={user} onNavigate={onNavigate} />}
       />
       <Route
         path="/direct/:ref"

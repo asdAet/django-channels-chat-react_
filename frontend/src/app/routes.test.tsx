@@ -18,9 +18,13 @@ vi.mock("../pages/ProfilePage", () => ({
   ProfilePage: () => <div>PROFILE_PAGE</div>,
 }));
 
-vi.mock("../pages/DirectLayout", () => ({
-  DirectLayout: ({ publicRef }: { publicRef?: string }) => (
-    <div>{publicRef ? `DIRECT_PAGE:${publicRef}` : "DIRECT_PAGE"}</div>
+vi.mock("../pages/DirectChatsPage", () => ({
+  DirectChatsPage: () => <div>DIRECT_CHATS_PAGE</div>,
+}));
+
+vi.mock("../pages/DirectChatByUsernamePage", () => ({
+  DirectChatByUsernamePage: ({ publicRef }: { publicRef: string }) => (
+    <div>DIRECT_BY_REF_PAGE:{publicRef}</div>
   ),
 }));
 
@@ -88,7 +92,7 @@ describe("AppRoutes", () => {
         />
       </MemoryRouter>,
     );
-    expect(screen.getByText("DIRECT_PAGE:alice")).toBeInTheDocument();
+    expect(screen.getByText("DIRECT_BY_REF_PAGE:alice")).toBeInTheDocument();
   });
 
   it("treats legacy /@username route as invalid and redirects to home", () => {
