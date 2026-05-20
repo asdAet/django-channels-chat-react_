@@ -207,13 +207,13 @@ describe("MessageBubble", () => {
     expect(screen.queryByText("Сообщение удалено")).toBeNull();
   });
 
-  it("shows the public username instead of the profile display name", () => {
+  it("shows the display name instead of the numeric public id", () => {
     render(
       <MessageBubble
         message={{
           ...baseMessage,
-          username: "methoddpp",
-          publicRef: "@methoddpp",
+          username: "1234567890",
+          publicRef: "1234567890",
           displayName: "Name",
         }}
         isOwn={false}
@@ -221,10 +221,10 @@ describe("MessageBubble", () => {
       />,
     );
 
-    expect(screen.getByText("methoddpp")).toBeInTheDocument();
-    expect(screen.queryByText("Name")).toBeNull();
+    expect(screen.getByText("Name")).toBeInTheDocument();
+    expect(screen.queryByText("1234567890")).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Профиль methoddpp" }),
+      screen.getByRole("button", { name: "Профиль Name" }),
     ).toBeInTheDocument();
   });
 

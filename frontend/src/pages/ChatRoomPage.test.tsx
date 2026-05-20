@@ -359,6 +359,51 @@ const installMobileViewport = () => {
   };
 };
 
+const mockResizeObservers: MockResizeObserver[] = [];
+
+class MockResizeObserver {
+  private readonly callback: ResizeObserverCallback;
+  private readonly observedElements = new Set<Element>();
+
+  constructor(callback: ResizeObserverCallback) {
+    this.callback = callback;
+    mockResizeObservers.push(this);
+  }
+
+  observe = vi.fn((element: Element) => {
+    this.observedElements.add(element);
+  });
+
+  unobserve = vi.fn((element: Element) => {
+    this.observedElements.delete(element);
+  });
+
+  disconnect = vi.fn(() => {
+    this.observedElements.clear();
+  });
+
+  trigger = () => {
+    this.callback(
+      Array.from(this.observedElements).map(
+        (target) => ({ target }) as ResizeObserverEntry,
+      ),
+      this as unknown as ResizeObserver,
+    );
+  };
+}
+
+const installMockResizeObserver = () => {
+  mockResizeObservers.length = 0;
+  vi.stubGlobal(
+    "ResizeObserver",
+    MockResizeObserver as unknown as typeof ResizeObserver,
+  );
+};
+
+const triggerMockResizeObservers = () => {
+  mockResizeObservers.forEach((observer) => observer.trigger());
+};
+
 /**
  * Создает сообщение от другого пользователя для проверки прав.
  * @param id Идентификатор сущности.
@@ -2254,6 +2299,361 @@ describe("ChatRoomPage", () => {
 
     expect(scrollWrites.filter((value) => value === 1200)).toHaveLength(1);
     expect(chatLog.querySelector("[data-unread-divider]")).toBeNull();
+  });
+
+  it("keeps the visible chat bottom anchored when rendered content grows", async () => {
+    installMockResizeObserver();
+    chatRoomMock.details = {
+      roomId: 2,
+      name: "dm",
+      kind: "direct",
+      created: false,
+      createdBy: null,
+      peer: {
+        publicRef: "@alice",
+        username: "alice",
+        profileImage: null,
+        lastSeen: null,
+      },
+      lastReadMessageId: 3,
+    } as RoomDetails;
+    chatRoomMock.messages = [
+      makeForeignMessage(1, "first"),
+      makeForeignMessage(2, "second"),
+      makeForeignMessage(3, "third"),
+    ];
+
+    const { container } = render(
+      <ChatRoomPage
+        roomId="2"
+        initialRoomKind="direct"
+        user={user}
+        onNavigate={vi.fn()}
+      />,
+    );
+    const chatLog = container.querySelector(
+      '[aria-live="polite"]',
+    ) as HTMLDivElement;
+
+    let scrollTopValue = 0;
+    let scrollHeightValue = 1200;
+    Object.defineProperty(chatLog, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = value;
+      },
+    });
+    Object.defineProperty(chatLog, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeightValue,
+    });
+    Object.defineProperty(chatLog, "clientHeight", {
+      configurable: true,
+      get: () => 400,
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 260));
+    });
+    await waitFor(() => expect(mockResizeObservers.length).toBeGreaterThan(0));
+
+    scrollTopValue = 800;
+    fireEvent.scroll(chatLog);
+
+    await act(async () => {
+      scrollHeightValue = 1320;
+      triggerMockResizeObservers();
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    });
+
+    expect(scrollTopValue).toBe(920);
+  });
+
+  it("anchors visible reaction growth while the user is reading above bottom", async () => {
+    installMockResizeObserver();
+    chatRoomMock.details = {
+      roomId: 2,
+      name: "dm",
+      kind: "direct",
+      created: false,
+      createdBy: null,
+      peer: {
+        publicRef: "@alice",
+        username: "alice",
+        profileImage: null,
+        lastSeen: null,
+      },
+      lastReadMessageId: 3,
+    } as RoomDetails;
+    chatRoomMock.messages = [
+      makeForeignMessage(1, "first"),
+      makeForeignMessage(2, "second"),
+      makeForeignMessage(3, "third"),
+    ];
+
+    const { container } = render(
+      <ChatRoomPage
+        roomId="2"
+        initialRoomKind="direct"
+        user={user}
+        onNavigate={vi.fn()}
+      />,
+    );
+    const chatLog = container.querySelector(
+      '[aria-live="polite"]',
+    ) as HTMLDivElement;
+
+    let scrollTopValue = 0;
+    let scrollHeightValue = 1200;
+    Object.defineProperty(chatLog, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = value;
+      },
+    });
+    Object.defineProperty(chatLog, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeightValue,
+    });
+    Object.defineProperty(chatLog, "clientHeight", {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(chatLog, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ bottom: 520 }),
+    });
+    let lowerVisibleShift = 0;
+    chatLog
+      .querySelectorAll<HTMLElement>("article[data-message-id]")
+      .forEach((node, index) => {
+        Object.defineProperty(node, "getBoundingClientRect", {
+          configurable: true,
+          value: () => ({
+            bottom:
+              220 +
+              index * 120 +
+              (index >= 2 ? lowerVisibleShift : 0) -
+              (scrollTopValue - 160),
+            top:
+              140 +
+              index * 120 +
+              (index >= 2 ? lowerVisibleShift : 0) -
+              (scrollTopValue - 160),
+          }),
+        });
+      });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 260));
+    });
+    await waitFor(() => expect(mockResizeObservers.length).toBeGreaterThan(0));
+
+    scrollTopValue = 160;
+    fireEvent.scroll(chatLog);
+
+    await act(async () => {
+      scrollHeightValue = 1248;
+      lowerVisibleShift = 48;
+      triggerMockResizeObservers();
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    });
+
+    expect(scrollTopValue).toBe(208);
+  });
+
+  it("does not anchor loaded content below the visible viewport", async () => {
+    installMockResizeObserver();
+    chatRoomMock.details = {
+      roomId: 2,
+      name: "dm",
+      kind: "direct",
+      created: false,
+      createdBy: null,
+      peer: {
+        publicRef: "@alice",
+        username: "alice",
+        profileImage: null,
+        lastSeen: null,
+      },
+      lastReadMessageId: 3,
+    } as RoomDetails;
+    chatRoomMock.messages = [
+      makeForeignMessage(1, "first"),
+      makeForeignMessage(2, "second"),
+      makeForeignMessage(3, "third"),
+    ];
+
+    const { container } = render(
+      <ChatRoomPage
+        roomId="2"
+        initialRoomKind="direct"
+        user={user}
+        onNavigate={vi.fn()}
+      />,
+    );
+    const chatLog = container.querySelector(
+      '[aria-live="polite"]',
+    ) as HTMLDivElement;
+
+    let scrollTopValue = 0;
+    let scrollHeightValue = 1200;
+    Object.defineProperty(chatLog, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = value;
+      },
+    });
+    Object.defineProperty(chatLog, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeightValue,
+    });
+    Object.defineProperty(chatLog, "clientHeight", {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(chatLog, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ bottom: 520 }),
+    });
+    chatLog
+      .querySelectorAll<HTMLElement>("article[data-message-id]")
+      .forEach((node, index) => {
+        Object.defineProperty(node, "getBoundingClientRect", {
+          configurable: true,
+          value: () => ({
+            bottom: 780 + index * 120,
+            top: 700 + index * 120,
+          }),
+        });
+      });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 260));
+    });
+    await waitFor(() => expect(mockResizeObservers.length).toBeGreaterThan(0));
+
+    scrollTopValue = 160;
+    fireEvent.scroll(chatLog);
+
+    await act(async () => {
+      scrollHeightValue = 1320;
+      triggerMockResizeObservers();
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    });
+
+    expect(scrollTopValue).toBe(160);
+  });
+
+  it("anchors repeated content growth once per actual scrollHeight delta", async () => {
+    installMockResizeObserver();
+    chatRoomMock.details = {
+      roomId: 2,
+      name: "dm",
+      kind: "direct",
+      created: false,
+      createdBy: null,
+      peer: {
+        publicRef: "@alice",
+        username: "alice",
+        profileImage: null,
+        lastSeen: null,
+      },
+      lastReadMessageId: 3,
+    } as RoomDetails;
+    chatRoomMock.messages = [
+      makeForeignMessage(1, "first"),
+      makeForeignMessage(2, "second"),
+      makeForeignMessage(3, "third"),
+    ];
+
+    const { container } = render(
+      <ChatRoomPage
+        roomId="2"
+        initialRoomKind="direct"
+        user={user}
+        onNavigate={vi.fn()}
+      />,
+    );
+    const chatLog = container.querySelector(
+      '[aria-live="polite"]',
+    ) as HTMLDivElement;
+
+    const scrollWrites: number[] = [];
+    let scrollTopValue = 0;
+    let scrollHeightValue = 1200;
+    Object.defineProperty(chatLog, "scrollTop", {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = value;
+        scrollWrites.push(value);
+      },
+    });
+    Object.defineProperty(chatLog, "scrollHeight", {
+      configurable: true,
+      get: () => scrollHeightValue,
+    });
+    Object.defineProperty(chatLog, "clientHeight", {
+      configurable: true,
+      get: () => 400,
+    });
+    Object.defineProperty(chatLog, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ bottom: 520 }),
+    });
+    let lowerVisibleShift = 0;
+    chatLog
+      .querySelectorAll<HTMLElement>("article[data-message-id]")
+      .forEach((node, index) => {
+        Object.defineProperty(node, "getBoundingClientRect", {
+          configurable: true,
+          value: () => ({
+            bottom: 220 + index * 120 + lowerVisibleShift,
+            top: 140 + index * 120 + lowerVisibleShift,
+          }),
+        });
+      });
+
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 260));
+    });
+    await waitFor(() => expect(mockResizeObservers.length).toBeGreaterThan(0));
+
+    scrollTopValue = 800;
+    fireEvent.scroll(chatLog);
+    const writesBeforeResize = scrollWrites.length;
+
+    await act(async () => {
+      scrollHeightValue = 1300;
+      lowerVisibleShift = 100;
+      triggerMockResizeObservers();
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    });
+
+    expect(scrollTopValue).toBe(900);
+    expect(scrollWrites).toHaveLength(writesBeforeResize + 1);
+
+    await act(async () => {
+      triggerMockResizeObservers();
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    });
+
+    expect(scrollTopValue).toBe(900);
+    expect(scrollWrites).toHaveLength(writesBeforeResize + 1);
+
+    await act(async () => {
+      scrollHeightValue = 1350;
+      lowerVisibleShift = 150;
+      triggerMockResizeObservers();
+      await new Promise((resolve) => window.setTimeout(resolve, 40));
+    });
+
+    expect(scrollTopValue).toBe(950);
+    expect(scrollWrites).toHaveLength(writesBeforeResize + 2);
   });
 
   it("does not jump to bottom while positioning to first unread on enter", async () => {

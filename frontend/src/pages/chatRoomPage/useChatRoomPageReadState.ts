@@ -17,6 +17,7 @@ import type {
   UseChatRoomPageReadStateOptions,
   UseChatRoomPageReadStateResult,
 } from "./useChatRoomPageReadState.types";
+import { useChatViewportAnchor } from "./useChatScrollHeightAnchor";
 import type {
   InitialPositioningPhase,
   InitialPositioningTarget,
@@ -613,6 +614,22 @@ export function useChatRoomPageReadState({
       applyViewportReadNow(listRef.current);
     });
   }, [applyViewportReadNow, readStateEnabled]);
+
+  const shouldSuspendScrollHeightAnchor = useCallback(
+    () =>
+      prependingRef.current || initialPositioningPhaseRef.current !== "settled",
+    [],
+  );
+
+  useChatViewportAnchor({
+    listRef,
+    enabled: isInitialPositioningSettled,
+    isAtBottomRef,
+    beginProgrammaticScroll,
+    endProgrammaticScroll,
+    scheduleViewportReadSync,
+    shouldSuspend: shouldSuspendScrollHeightAnchor,
+  });
 
   useEffect(() => {
     if (!readStateEnabled) {

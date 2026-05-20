@@ -40,7 +40,10 @@ import {
   triggerFileDownload,
 } from "../../shared/lib/fileActions";
 import { formatTimestamp } from "../../shared/lib/format";
-import { normalizePublicRef } from "../../shared/lib/publicRef";
+import {
+  isFallbackPublicId,
+  normalizePublicRef,
+} from "../../shared/lib/publicRef";
 import type { ContextMenuItem } from "../../shared/ui";
 import {
   AudioAttachmentPlayer,
@@ -182,32 +185,40 @@ const pickAuthorLabelPart = (
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const pickHumanAuthorLabelPart = (
+  value: string | number | null | undefined,
+): string | null => {
+  const label = pickAuthorLabelPart(value);
+  return label && !isFallbackPublicId(label) ? label : null;
+};
+
 /**
  * Возвращает стабильную подпись автора для заголовка сообщения и fallback-аватарки.
  *
  * @param author Данные автора сообщения или цитируемого сообщения.
- * @param fallback Подпись на случай, если публичные поля автора отсутствуют.
- * @returns Короткая подпись автора, синхронная с тем же пользователем, что и аватарка.
+ * @param fallback Подпись на случай, если имя и публичные поля автора отсутствуют.
+ * @returns Человеческое имя автора, затем публичный handle, без показа numeric public id.
  */
 const resolveMessageAuthorLabel = (
   author: MessageAuthorLike,
-  fallback = "user",
+  fallback = "Пользователь",
 ): string => {
-  const username = pickAuthorLabelPart(author.username);
+  const displayName = pickHumanAuthorLabelPart(author.displayName);
+  if (displayName) {
+    return displayName;
+  }
+
+  const username = pickHumanAuthorLabelPart(author.username);
   if (username) {
     return normalizePublicRef(username) || username;
   }
 
   const publicRef = normalizePublicRef(author.publicRef);
-  if (publicRef) {
+  if (publicRef && !isFallbackPublicId(publicRef)) {
     return publicRef;
   }
 
-  return (
-    pickAuthorLabelPart(author.displayName) ??
-    pickAuthorLabelPart(author.userId) ??
-    fallback
-  );
+  return fallback;
 };
 
 const MOBILE_MENU_IGNORE_SELECTOR =

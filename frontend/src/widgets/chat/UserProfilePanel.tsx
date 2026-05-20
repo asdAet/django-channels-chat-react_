@@ -398,6 +398,8 @@ export function UserProfilePanel({ publicRef, currentPublicRef }: Props) {
       user.name,
       (user as { last_name?: string | null }).last_name,
     ) || resolveIdentityLabel(user, "Без имени");
+
+    
   const targetPublicRef = (user.publicRef || publicRef || "").trim();
   const isSelf = relation.state === "self";
   const lastSeenLabel = formatLastSeen(user.lastSeen ?? null);

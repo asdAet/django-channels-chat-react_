@@ -205,7 +205,7 @@ def _build_room_unread_events_sync(room_id: int) -> list[dict[str, Any]]:
 
 _build_room_unread_events = database_sync_to_async(
     _build_room_unread_events_sync,
-    thread_sensitive=False,
+    thread_sensitive=True,
 )
 
 
@@ -323,5 +323,5 @@ def _build_direct_inbox_events_sync(
 
 _build_direct_inbox_events = database_sync_to_async(
     _build_direct_inbox_events_sync,
-    thread_sensitive=False,
+    thread_sensitive=True,
 )
