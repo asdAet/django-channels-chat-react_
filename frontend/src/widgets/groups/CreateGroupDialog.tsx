@@ -17,7 +17,7 @@ type Props = {
 export function CreateGroupDialog({ onCreated, onClose }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [isPublic, setIsPublic] = useState(false);
+  const isPublic = false;
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
 
@@ -85,16 +85,6 @@ export function CreateGroupDialog({ onCreated, onClose }: Props) {
             disabled={sending}
           />
         </div>
-
-        {/* <label className={styles.dialogCheckRow}>
-          <input
-            type="checkbox"
-            checked={isPublic}
-            onChange={(e) => setIsPublic(e.target.checked)}
-            disabled={sending}
-          />
-          Публичная группа
-        </label> */}
 
         {error && <div className={styles.dialogError}>{error}</div>}
 
